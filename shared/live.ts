@@ -1,6 +1,6 @@
 // Messages between the browser (src/live.ts) and a trip's room (server/room.ts), as JSON over a WebSocket.
 // Who you are is not part of the messages: the server checks your session and tells the room.
-import type { GameAction, GameEvent, GameState } from './snowball.ts';
+import type { GameAction, GameEvent, GameKind, GameState, PisteRef } from './games.ts';
 
 /** what someone is looking at right now */
 export interface Viewing {
@@ -36,7 +36,7 @@ export type ClientMsg =
   | { t: 'hello'; viewing: Viewing }
   | { t: 'view'; viewing: Viewing }
   | { t: 'msg'; text: string }
-  | { t: 'challenge'; to: string }
+  | { t: 'challenge'; to: string; kind: GameKind; piste?: PisteRef }
   | { t: 'answer'; game: string; accept: boolean }
   | { t: 'play'; game: string; a: GameAction }
   /** give up, or withdraw a challenge */

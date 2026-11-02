@@ -1,7 +1,7 @@
-// Snowball fight in the browser: the invite, waiting for an answer, the game itself and the result.
-// The room decides what hits (server/snowball.ts); this only shows it and sends button presses.
-// Only the tab that challenged or accepted plays; other tabs of the same person just close their dialog.
-import { DUCK_COOLDOWN_MS, DUCK_MS, RELOAD_MS, WIN_HITS, type GameEvent, type GameState } from '../shared/snowball';
+// Snowball fight in the browser: the game screen and the result (inviting is in games.ts).
+// The room decides what hits (server/games.ts); this only shows it and sends button presses.
+import type { GameEvent, GameState } from '../shared/games';
+import { DUCK_COOLDOWN_MS, DUCK_MS, RELOAD_MS, WIN_HITS } from '../shared/snowball';
 import type { Live } from './live';
 import { esc } from './settings';
 
@@ -17,125 +17,11 @@ const figure = (c: string) => `<svg class="fig" viewBox="0 0 60 100" aria-hidden
   <path d="M17.5 24Q30 4 42.5 24Z" fill="${c}"/><rect x="16.5" y="21" width="27" height="5" rx="2.5" fill="#F4EDE1"/><circle cx="30" cy="9" r="4.5" fill="#F4EDE1"/>
 </svg>`;
 
-const COLORS = { me: '#E0533D', them: '#5B9BD5' };
-const fmt = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-
-export function createSnowball(opts: { toast(html: string, ms: number): void }) {
-  /** games this tab plays (it challenged or accepted) */
-  const mine = new Set<string>();
-  /** challenged from this tab, waiting for the room to confirm */
-  let pending: { live: Live; to: string; naam: string } | null = null;
-  let box: HTMLElement | null = null, boxGame = '', screen: ReturnType<typeof gameScreen> | null = null, inviteT = 0, loadT = 0;
-
-  function overlay(game: string, html: string) {
-    close();
-    box = document.createElement('div');
-    box.className = 'sb';
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.innerHTML = html;
-    document.body.append(box);
-    document.body.classList.add('sbopen');
-    boxGame = game;
-    return box;
-  }
-  function close() {
-    clearInterval(inviteT);
-    clearTimeout(loadT);
-    screen?.stop();
-    screen = null;
-    box?.remove();
-    box = null;
-    boxGame = '';
-    document.body.classList.remove('sbopen');
-  }
-
-  /** waiting for the room: a spinning snowball, so it's clear something is happening */
-  function showLoading(game: string, text: string) {
-    overlay(game, `<div class="sbcard sbload">${SNOWBALL.replace('sbic', 'sbic big spin')}<h2>${text}</h2><p>Even geduld…</p></div>`);
-    loadT = window.setTimeout(() => {
-      pending = null;
-      close();
-      opts.toast(`${SNOWBALL}<span>Het sneeuwbalgevecht laadt niet. Controleer je verbinding en probeer het nog eens.</span>`, 6000);
-    }, 10_000);
-  }
-
-  // ---------- invite (to me) and waiting (I challenged) ----------
-  function showInvite(live: Live, g: GameState) {
-    const b = overlay(g.id, `<div class="sbcard">${SNOWBALL.replace('sbic', 'sbic big')}
-      <h2>${esc(g.a.naam)} daagt je uit voor een sneeuwbalgevecht!</h2>
-      <p>Wie het eerst ${WIN_HITS} keer raakt, wint. Doe je mee?</p>
-      <p class="sbleft" data-left></p>
-      <div class="sbrow"><button type="button" data-no>Nee, nu niet</button><button type="button" class="primary" data-yes>Ja, doe ik!</button></div></div>`);
-    countdown(b, g.left);
-    b.querySelector<HTMLButtonElement>('[data-yes]')!.onclick = () => { mine.add(g.id); live.answer(g.id, true); showLoading(g.id, 'Sneeuwbalgevecht laden'); };
-    b.querySelector<HTMLButtonElement>('[data-no]')!.onclick = () => { live.answer(g.id, false); close(); };
-    b.querySelector<HTMLButtonElement>('[data-yes]')!.focus();
-    navigator.vibrate?.([120, 80, 120]);
-  }
-  function showWaiting(live: Live, g: GameState) {
-    const b = overlay(g.id, `<div class="sbcard">${SNOWBALL.replace('sbic', 'sbic big')}
-      <h2>Je hebt ${esc(g.b.naam)} uitgedaagd</h2>
-      <p>Even wachten tot ${esc(g.b.naam)} ja zegt…</p>
-      <p class="sbleft" data-left></p>
-      <div class="sbrow"><button type="button" data-cancel>Toch niet</button></div></div>`);
-    countdown(b, g.left);
-    b.querySelector<HTMLButtonElement>('[data-cancel]')!.onclick = () => { live.quit(g.id); close(); };
-  }
-  function countdown(b: HTMLElement, left: number) {
-    const end = Date.now() + left, el = b.querySelector('[data-left]')!;
-    const tick = () => (el.textContent = `Nog ${Math.max(0, Math.ceil((end - Date.now()) / 1000))} seconden`);
-    tick();
-    inviteT = window.setInterval(tick, 500);
-  }
-
-  // ---------- from the room ----------
-  function onGame(live: Live, g: GameState, ev?: GameEvent) {
-    const me = live.state.me, iAmA = g.a.id === me, other = iAmA ? g.b : g.a;
-    if (g.status === 'invited') {
-      if (!iAmA) { if (boxGame !== g.id) showInvite(live, g); }
-      else if (pending && pending.to === g.b.id) { pending = null; mine.add(g.id); showWaiting(live, g); }
-      return;
-    }
-    if (!mine.has(g.id)) {
-      // another tab or device of mine handles this game
-      if (boxGame === g.id) { close(); if (g.status !== 'over') opts.toast(`${SNOWBALL}<span>Je speelt tegen <b>${esc(other.naam)}</b> op een ander scherm.</span>`, 5000); }
-      return;
-    }
-    if (g.status === 'over' && !screen) {
-      // it ended before it started: declined, no answer, withdrawn, someone left
-      mine.delete(g.id);
-      close();
-      const text = { declined: `${esc(other.naam)} wil nu even niet.`, expired: `${esc(other.naam)} reageerde niet.`, cancelled: `${esc(other.naam)} trok de uitdaging in.` }[g.end as string] || 'Het sneeuwbalgevecht ging niet door.';
-      opts.toast(`${SNOWBALL}<span>${text}</span>`, 6000);
-      return;
-    }
-    if (!screen) {
-      const b = overlay(g.id, '');
-      screen = gameScreen(b, live, g, () => { mine.delete(g.id); close(); }, () => { close(); challenge(live, other.id, other.naam); });
-    }
-    screen.update(g, ev);
-    if (g.status === 'over') mine.delete(g.id);
-  }
-
-  function challenge(live: Live | undefined, to: string, naam: string) {
-    if (!live || live.state.status !== 'online') return opts.toast(`${SNOWBALL}<span>Geen verbinding, probeer het zo nog eens.</span>`, 4000);
-    pending = { live, to, naam };
-    live.challenge(to);
-    showLoading('', `Uitdaging naar ${esc(naam)} versturen`);
-  }
-
-  return {
-    onGame,
-    challenge,
-    /** something's on screen (no toasts about games then) */
-    busy: () => !!box,
-    onError(error: string) { pending = null; if (box && !screen) close(); opts.toast(`${SNOWBALL}<span>${esc(error)}</span>`, 5000); },
-  };
-}
+export const COLORS = { me: '#E0533D', them: '#5B9BD5' };
+export const fmt = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 // ---------- the game ----------
-function gameScreen(b: HTMLElement, live: Live, first: GameState, done: () => void, again: () => void) {
+export function snowballScreen(b: HTMLElement, live: Live, first: GameState, done: () => void, again: () => void) {
   const me = live.state.me, iAmA = first.a.id === me, them = iAmA ? first.b : first.a;
   b.classList.add('sbgame');
   b.innerHTML = `
@@ -261,7 +147,7 @@ function gameScreen(b: HTMLElement, live: Live, first: GameState, done: () => vo
 
   function hits() {
     for (const p of [me, them.id]) {
-      const n = g.hits[p] || 0;
+      const n = g.score[p] || 0;
       q(`[data-hits="${p}"]`).innerHTML = Array.from({ length: WIN_HITS }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
       q(`[data-hits="${p}"]`).setAttribute('aria-label', `${n} van de ${WIN_HITS} keer raak`);
     }
@@ -271,7 +157,7 @@ function gameScreen(b: HTMLElement, live: Live, first: GameState, done: () => vo
     over = true;
     const won = g.winner === me, draw = !g.winner;
     const title = draw ? 'Gelijkspel!' : won ? 'Gewonnen! 🏆' : `${esc(them.naam)} wint`;
-    const why = g.end === 'quit' ? (won ? `${esc(them.naam)} gaf op.` : 'Je gaf op.') : g.end === 'left' ? (won ? `${esc(them.naam)} is weg.` : 'Je verbinding was weg.') : `${g.hits[me] || 0} – ${g.hits[them.id] || 0}`;
+    const why = g.end === 'quit' ? (won ? `${esc(them.naam)} gaf op.` : 'Je gaf op.') : g.end === 'left' ? (won ? `${esc(them.naam)} is weg.` : 'Je verbinding was weg.') : `${g.score[me] || 0} – ${g.score[them.id] || 0}`;
     const end = document.createElement('div');
     end.className = 'sbend';
     end.innerHTML = `<h2>${title}</h2><p>${why}</p><div class="sbrow"><button type="button" data-close>Sluiten</button>${live.state.online.some((o) => o.id === them.id) ? '<button type="button" class="primary" data-again>Nog een keer</button>' : ''}</div>`;

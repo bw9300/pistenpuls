@@ -1,10 +1,10 @@
-// Snowball fights inside a trip's room. The room is the referee: it decides what hits, the browsers only press buttons.
-// Games live in memory: they're short, and the pending timers keep a Durable Object awake while one is going on.
+// Mini games inside a trip's room. The room is the referee: it decides what hits and who's down first,
+// the browsers only press buttons. Games live in memory: they're short, and the pending timers keep
+// a Durable Object awake while one is going on.
 import type { ServerMsg } from '../shared/live.ts';
-import {
-  COUNTDOWN_MS, DUCK_COOLDOWN_MS, DUCK_MS, FLIGHT_MS, GAME_MS, GONE_MS, INVITE_MS, RELOAD_MS, WIN_HITS,
-  type GameAction, type GameEnd, type GameEvent, type GameState, type Player,
-} from '../shared/snowball.ts';
+import { COUNTDOWN_MS, GAME_WORDS, GONE_MS, INVITE_MS, type GameAction, type GameEnd, type GameEvent, type GameKind, type GameState, type PisteRef, type Player } from '../shared/games.ts';
+import { DUCK_COOLDOWN_MS, DUCK_MS, FLIGHT_MS, GAME_MS, RELOAD_MS, WIN_HITS } from '../shared/snowball.ts';
+import { MIN_TAP_MS, SKI_MS, SKI_TAPS } from '../shared/ski.ts';
 
 export interface GamesHost {
   /** the name of someone who is in the room now, else null */
@@ -17,15 +17,22 @@ export interface GamesHost {
 interface Game extends Omit<GameState, 'left'> {
   /** when the current step ends (answer deadline, start, end) */
   until: number;
+  started: number;
+  timers: Set<ReturnType<typeof setTimeout>>;
+  // snowball
   reloadAt: Record<string, number>;
   duckUntil: Record<string, number>;
   duckAt: Record<string, number>;
-  timers: Set<ReturnType<typeof setTimeout>>;
+  // ski
+  lastTap: Record<string, number>;
+  dirty: boolean;
 }
 
 const ACTIVE = new Set(['invited', 'countdown', 'playing']);
+const LENGTH: Record<GameKind, number> = { snowball: GAME_MS, ski: SKI_MS };
+const secs = (ms: number) => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
 
-export class Snowball {
+export class Games {
   private games = new Map<string, Game>();
   private n = 0;
 
@@ -37,20 +44,22 @@ export class Snowball {
     return null;
   }
 
-  challenge(from: Player, to: string): string | null {
+  challenge(from: Player, to: string, kind: GameKind, piste?: PisteRef): string | null {
     if (to === from.id) return 'Jezelf uitdagen gaat lastig.';
     const naam = this.host.online(to);
     if (!naam) return 'Die is nu niet online.';
-    if (this.gameOf(from.id)) return 'Je bent al met een sneeuwbalgevecht bezig.';
-    if (this.gameOf(to)) return `${naam} is al met een sneeuwbalgevecht bezig.`;
+    if (this.gameOf(from.id)) return 'Je bent al met een spelletje bezig.';
+    if (this.gameOf(to)) return `${naam} is al met een spelletje bezig.`;
+    if (kind === 'ski' && !piste) return 'Geen piste gekozen.';
     const g: Game = {
-      id: Date.now().toString(36) + (this.n++).toString(36), a: from, b: { id: to, naam }, status: 'invited',
-      hits: { [from.id]: 0, [to]: 0 }, until: Date.now() + INVITE_MS,
-      reloadAt: {}, duckUntil: {}, duckAt: {}, timers: new Set(),
+      id: Date.now().toString(36) + (this.n++).toString(36), kind, a: from, b: { id: to, naam }, status: 'invited',
+      score: { [from.id]: 0, [to]: 0 }, piste: kind === 'ski' ? piste : undefined, until: Date.now() + INVITE_MS, started: 0,
+      timers: new Set(), reloadAt: {}, duckUntil: {}, duckAt: {}, lastTap: {}, dirty: false,
     };
     this.games.set(g.id, g);
     this.later(g, INVITE_MS, () => g.status === 'invited' && this.finish(g, null, 'expired'));
-    this.host.system(`❄ ${from.naam} daagt ${naam} uit voor een sneeuwbalgevecht!`);
+    const w = GAME_WORDS[kind];
+    this.host.system(`${w.icon} ${from.naam} daagt ${naam} uit voor ${w.een}${piste ? ` (${piste.label})` : ''}!`);
     this.send(g);
     return null;
   }
@@ -61,15 +70,17 @@ export class Snowball {
     if (!accept) return this.finish(g, null, 'declined');
     g.status = 'countdown';
     g.until = Date.now() + COUNTDOWN_MS;
-    this.host.system(`❄ ${g.b.naam} neemt de uitdaging van ${g.a.naam} aan. Gooien maar!`);
+    this.host.system(`${GAME_WORDS[g.kind].icon} ${g.b.naam} neemt de uitdaging van ${g.a.naam} aan. ${g.kind === 'ski' ? 'Daar gaan ze!' : 'Gooien maar!'}`);
     this.send(g);
     this.later(g, COUNTDOWN_MS, () => {
       g.status = 'playing';
-      g.until = Date.now() + GAME_MS;
+      g.started = Date.now();
+      g.until = g.started + LENGTH[g.kind];
       this.send(g);
-      this.later(g, GAME_MS, () => {
-        const [ha, hb] = [g.hits[g.a.id], g.hits[g.b.id]];
-        this.finish(g, ha === hb ? null : ha > hb ? g.a.id : g.b.id, 'time');
+      if (g.kind === 'ski') this.tick(g);
+      this.later(g, LENGTH[g.kind], () => {
+        const [sa, sb] = [g.score[g.a.id], g.score[g.b.id]];
+        this.finish(g, sa === sb ? null : sa > sb ? g.a.id : g.b.id, 'time');
       });
     });
   }
@@ -77,6 +88,7 @@ export class Snowball {
   play(userId: string, id: string, a: GameAction) {
     const g = this.games.get(id);
     if (!g || g.status !== 'playing' || (g.a.id !== userId && g.b.id !== userId)) return;
+    if (g.kind === 'ski') { if (a === 'push') this.push(g, userId); return; }
     const now = Date.now(), other = g.a.id === userId ? g.b.id : g.a.id;
     if (a === 'duck') {
       if (now < (g.duckAt[userId] || 0)) return;
@@ -84,6 +96,7 @@ export class Snowball {
       g.duckAt[userId] = now + DUCK_COOLDOWN_MS;
       return this.send(g, { k: 'duck', by: userId, ms: DUCK_MS });
     }
+    if (a !== 'throw') return;
     // throwing: not while reloading or ducking
     if (now < (g.reloadAt[userId] || 0) || now < (g.duckUntil[userId] || 0)) return;
     g.reloadAt[userId] = now + RELOAD_MS;
@@ -91,9 +104,26 @@ export class Snowball {
     this.later(g, FLIGHT_MS, () => {
       if (g.status !== 'playing') return;
       if (Date.now() < (g.duckUntil[other] || 0)) return this.send(g, { k: 'miss', on: other });
-      g.hits[userId]++;
+      g.score[userId]++;
       this.send(g, { k: 'hit', on: other });
-      if (g.hits[userId] >= WIN_HITS) this.finish(g, userId, 'score');
+      if (g.score[userId] >= WIN_HITS) this.finish(g, userId, 'score');
+    });
+  }
+
+  // ---------- ski: every tap a bit further; positions go out 10× per second ----------
+  private push(g: Game, userId: string) {
+    const now = Date.now();
+    if (now - (g.lastTap[userId] || 0) < MIN_TAP_MS) return;
+    g.lastTap[userId] = now;
+    g.score[userId] = Math.min(SKI_TAPS, g.score[userId] + 1);
+    g.dirty = true;
+    if (g.score[userId] >= SKI_TAPS) { g.time = now - g.started; this.finish(g, userId, 'finish'); }
+  }
+  private tick(g: Game) {
+    this.later(g, 100, () => {
+      if (g.status !== 'playing') return;
+      if (g.dirty) { g.dirty = false; this.send(g); }
+      this.tick(g);
     });
   }
 
@@ -137,16 +167,21 @@ export class Snowball {
     this.send(g);
     this.games.delete(g.id);
     const naam = (id: string) => (id === g.a.id ? g.a.naam : g.b.naam);
-    const score = (w: string) => `${g.hits[w]}–${g.hits[w === g.a.id ? g.b.id : g.a.id]}`;
     const loser = winner && (winner === g.a.id ? g.b.id : g.a.id);
+    const score = (w: string) => `${g.score[w]}–${g.score[w === g.a.id ? g.b.id : g.a.id]}`;
+    const { de } = GAME_WORDS[g.kind];
+    const ski = g.kind === 'ski';
     this.host.system({
       declined: `${g.b.naam} slaat de uitdaging van ${g.a.naam} af.`,
       expired: `${g.b.naam} reageerde niet op de uitdaging van ${g.a.naam}.`,
       cancelled: `${g.a.naam} trekt de uitdaging aan ${g.b.naam} in.`,
-      score: winner ? `🏆 ${naam(winner)} wint het sneeuwbalgevecht van ${naam(loser!)} met ${score(winner)}!` : '',
-      time: winner ? `🏆 ${naam(winner)} wint het sneeuwbalgevecht van ${naam(loser!)} met ${score(winner)} (tijd op).` : `Het sneeuwbalgevecht tussen ${g.a.naam} en ${g.b.naam} eindigt gelijk (${g.hits[g.a.id]}–${g.hits[g.b.id]}).`,
-      quit: `🏆 ${naam(loser!)} geeft op: ${naam(winner!)} wint het sneeuwbalgevecht.`,
-      left: `🏆 ${naam(loser!)} is weg: ${naam(winner!)} wint het sneeuwbalgevecht.`,
+      score: winner ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)} met ${score(winner)}!` : '',
+      finish: winner ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)}: in ${secs(g.time || 0)} beneden!` : '',
+      time: winner
+        ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)} ${ski ? '(verst gekomen)' : `met ${score(winner)} (tijd op)`}.`
+        : `${de[0].toUpperCase() + de.slice(1)} tussen ${g.a.naam} en ${g.b.naam} eindigt gelijk${ski ? '' : ` (${g.score[g.a.id]}–${g.score[g.b.id]})`}.`,
+      quit: `🏆 ${naam(loser!)} geeft op: ${naam(winner!)} wint ${de}.`,
+      left: `🏆 ${naam(loser!)} is weg: ${naam(winner!)} wint ${de}.`,
     }[end]);
   }
 
@@ -156,8 +191,8 @@ export class Snowball {
   }
 
   private view(g: Game): GameState {
-    const { id, a, b, status, hits, winner, end } = g;
-    return { id, a, b, status, hits, winner, end, left: Math.max(0, g.until - Date.now()) };
+    const { id, kind, a, b, status, score, piste, winner, end, time } = g;
+    return { id, kind, a, b, status, score, piste, winner, end, time, left: Math.max(0, g.until - Date.now()) };
   }
 
   private send(g: Game, ev?: GameEvent) {

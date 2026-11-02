@@ -62,15 +62,19 @@ Wie je bent bepaalt de server (sessie + lidmaatschap worden gecontroleerd voorda
 - Cloudflare: één Durable Object per reis, met eigen SQLite (`server/cloudflare.ts`)
 - Node: `ws` + hetzelfde SQLite-bestand in `data/` (`server/node.ts`, Node 22.13 of nieuwer)
 
-### Sneeuwbalgevecht
+### Spelletjes
 
-In de chat staat een sneeuwbal achter de naam van wie online is: daarmee daag je iemand uit. Die krijgt een melding (ja/nee, 30 seconden).
-Twee knoppen: **Gooien** en **Bukken** (of spatie / pijl omlaag). Wie het eerst 3 keer raakt wint, na een minuut telt de stand.
-Uitdaging, antwoord en uitslag komen als regel in de chat.
+In de chat staat een knopje achter de naam van wie online is: kies een spel en daag diegene uit. Die krijgt een melding (ja/nee, 30 seconden).
+Uitdaging, antwoord en uitslag komen als regel in de chat. De kamer van de reis is de scheidsrechter: die beslist wat raak is en wie er eerst beneden is.
 
-- `shared/snowball.ts`: regels en timing (vliegtijd, herladen, bukken)
-- `server/snowball.ts`: de scheidsrechter, draait in de kamer van de reis (beslist wat raak is)
-- `src/snowball.ts`: uitnodiging, spelscherm, uitslag
+- **Sneeuwbalgevecht**: twee knoppen, **Gooien** en **Bukken** (of spatie / pijl omlaag). Wie het eerst 3 keer raakt wint.
+- **Skiwedstrijd**: op de 3D-kaart, over een willekeurige piste van 0,5–3 km. Eén knop: zo snel mogelijk tikken (of spatie). Wie het eerst beneden is wint.
+
+- `shared/games.ts`: berichten en toestand van een spel; `shared/snowball.ts`, `shared/ski.ts`: regels en timing
+- `server/games.ts`: de scheidsrechter, draait in de kamer van de reis
+- `src/games.ts`: spel kiezen, uitnodiging, wachten; `src/snowball.ts` en `src/ski.ts`: de spelschermen
+
+Een nieuw spel: een `GameKind` erbij in `shared/games.ts`, de regels in `server/games.ts`, een scherm in `src/`.
 
 ## Een skigebied toevoegen
 

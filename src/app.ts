@@ -390,8 +390,19 @@ new MutationObserver(queueTopbar).observe(topbar,{childList:true,subtree:true,ch
 addEventListener('resize',fit);document.addEventListener('visibilitychange',fit);fit();
 addEventListener('resize',queueTopbar);document.fonts&&document.fonts.ready.then(queueTopbar);queueTopbar();
 
+// ---------- the map as a playing field (ski race, src/ski.ts) ----------
+let drive=null; // set by a game: (dt)=>{pos,look} steers the camera, the tour waits
+const map3d={scene,camera,
+  /** a trip's world, if built */
+  world(tripId){const T=TRIPS.find(t=>t.id===tripId);return T&&T.state==='ready'?T.world:null},
+  /** put a trip's map on screen (switching trips if needed) and return its world */
+  async show(tripId){const i=TRIPS.findIndex(t=>t.id===tripId);if(i<0)return null;const T=TRIPS[i];await prepare(T,false);if(T.state!=='ready')return null;
+    if(shown!==T){flight=null;wolk.style.opacity=0;trip=i;swapTo(T);if(sc<0){sc=firstScene();scT=0;showScene(sc)}}return T.world},
+  drive(fn){drive=fn;document.body.classList.toggle('racing',!!fn)},
+};
+
 // ---------- start ----------
-const liveUI=ME?startLiveUI({apiBase:RT.apiBase,trips:TRIPS.map(t=>({id:t.id,naam:t.kort})),active:null,
+const liveUI=ME?startLiveUI({apiBase:RT.apiBase,trips:TRIPS.map(t=>({id:t.id,naam:t.kort})),active:null,stage:map3d,
   onUnread:(id,n)=>{const i=TRIPS.findIndex(t=>t.id===id),b=i>=0&&tabEls[i].querySelector('.tbadge');if(b){b.hidden=!n;b.textContent=n>9?'9+':String(n);tabEls[i].setAttribute('aria-label',TRIPS[i].kort+(n?`, ${n} ${n===1?'nieuw bericht':'nieuwe berichten'}`:''))}}}):null;
 $('chatBtn').hidden=!ME;
 showScene(-2);tickClock();setInterval(tickClock,1000);
@@ -419,7 +430,7 @@ function frame(now){
       else{flight.t=.42;if(flight.T.state==='error'){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}}
     }
     if(flight&&flight.t>=1){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}
-  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()){scT+=dt;if(scT>=SCENE_DUR)next()}
+  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()&&!drive){scT+=dt;if(scT>=SCENE_DUR)next()}
   if(sc>=0)segEls[sc].querySelector('i').style.width=(scenePin!==null?100:Math.min(100,scT/SCENE_DUR*100))+'%';
   const T=shown;if(!T||!T.world){return}
   const w=T.world,k=1-Math.exp(-dt*.6);
@@ -427,10 +438,14 @@ function frame(now){
   if(flight&&!flight.swapped)orbit.h+=w.R*.5*dt;
   ang+=dt*(reduce?.006:.035);
   // the tour's camera, unless the user is exploring (controls.ts)
-  const cv=flight?(controls.release(),{target,ang,r:orbit.r,h:orbit.h}):controls.update(dt,{target,ang,r:orbit.r,h:orbit.h});
-  camera.position.set(cv.target.x+Math.sin(cv.ang)*cv.r,cv.target.y+cv.h,cv.target.z+Math.cos(cv.ang)*cv.r);
-  const g=w.hAt(camera.position.x,camera.position.z)+w.R*.03;if(camera.position.y<g)camera.position.y=g;
-  camera.lookAt(cv.target);
+  const dv=!flight&&drive&&drive(dt);
+  if(dv){controls.release();camera.position.copy(dv.pos);camera.lookAt(dv.look)}
+  else{
+    const cv=flight?(controls.release(),{target,ang,r:orbit.r,h:orbit.h}):controls.update(dt,{target,ang,r:orbit.r,h:orbit.h});
+    camera.position.set(cv.target.x+Math.sin(cv.ang)*cv.r,cv.target.y+cv.h,cv.target.z+Math.cos(cv.ang)*cv.r);
+    const g=w.hAt(camera.position.x,camera.position.z)+w.R*.03;if(camera.position.y<g)camera.position.y=g;
+    camera.lookAt(cv.target);
+  }
   todT-=dt;if(todT<=0){applyTod();todT=2}
   // snow follows the camera
   const wn=weatherNow(T),kw=1-Math.exp(-dt*.4);for(const key in wxCur)wxCur[key]+=(wn[key]-wxCur[key])*kw;
@@ -448,11 +463,11 @@ function frame(now){
   if(T.lightMat)T.lightMat.opacity=lights;
   stars.position.copy(camera.position);
   renderer.setScissorTest(false);renderer.setViewport(0,0,VW,VH);renderer.render(scene,camera);
-  if(sc===2&&!$('camcol').hidden&&sceneEls.find(e=>+e.dataset.s===2).classList.contains('on')){renderer.setScissorTest(true);
+  if(!dv&&sc===2&&!$('camcol').hidden&&sceneEls.find(e=>+e.dataset.s===2).classList.contains('on')){renderer.setScissorTest(true);
     camEls.forEach((el,i)=>{const r=el.getBoundingClientRect();if(r.width<4)return;const y=VH-r.bottom;renderer.setViewport(r.left,y,r.width,r.height);renderer.setScissor(r.left,y,r.width,r.height);
       camCams[i].aspect=r.width/r.height;camCams[i].updateProjectionMatrix();renderer.render(scene,camCams[i])});renderer.setScissorTest(false)}
   const s=w.summit;v3.set(s[0],s[1]+w.R*.01,s[2]).project(camera);
-  const mx=((v3.x+1)/2*VW-OX)/S,my=((1-v3.y)/2*VH-OY)/S,vis=v3.z<1&&!flight&&sc!==2&&sc!==3&&(MOB?mx>150&&mx<DW-150&&my>(TRIPS.length>1?190:130)&&my<DH*.42:mx>200&&mx<DW-220&&my>180&&my<DH-200);
+  const mx=((v3.x+1)/2*VW-OX)/S,my=((1-v3.y)/2*VH-OY)/S,vis=v3.z<1&&!flight&&!dv&&sc!==2&&sc!==3&&(MOB?mx>150&&mx<DW-150&&my>(TRIPS.length>1?190:130)&&my<DH*.42:mx>200&&mx<DW-220&&my>180&&my<DH-200);
   marker.style.left=mx+'px';marker.style.top=my+'px';marker.style.opacity=vis?1:0;
 }
 requestAnimationFrame(frame);

@@ -1,6 +1,6 @@
 // Connection to one trip's room: who is online, who was here, messages. Reconnects by itself.
 // You are who your session says (the server checks it); the browser sends no identity.
-import type { GameAction, GameEvent, GameState } from '../shared/snowball';
+import type { GameAction, GameEvent, GameKind, GameState, PisteRef } from '../shared/games';
 import { type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live';
 
 export type LiveStatus = 'connecting' | 'online' | 'offline';
@@ -27,7 +27,7 @@ export interface Live {
   state: LiveState;
   say(text: string): void;
   /** snowball fight */
-  challenge(to: string): void;
+  challenge(to: string, kind: GameKind, piste?: PisteRef): void;
   answer(game: string, accept: boolean): void;
   play(game: string, a: GameAction): void;
   quit(game: string): void;
@@ -95,7 +95,7 @@ export function connectLive(opts: { apiBase: string; trip: string; active: strin
     trip: opts.trip,
     state,
     say: (text) => send({ t: 'msg', text }),
-    challenge: (to) => send({ t: 'challenge', to }),
+    challenge: (to, kind, piste) => send({ t: 'challenge', to, kind, piste }),
     answer: (game, accept) => send({ t: 'answer', game, accept }),
     play: (game, a) => send({ t: 'play', game, a }),
     quit: (game) => send({ t: 'quit', game }),

@@ -411,3 +411,43 @@ body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:h
 .sbic.spin{animation:sbspin 1.1s cubic-bezier(.5,.1,.5,.9) infinite}
 @keyframes sbspin{50%{transform:translateY(-10px) rotate(180deg)}to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){.sbic.spin{animation-duration:3s}}
+
+/* ---------- choosing a game ---------- */
+.skic{width:20px;height:20px;flex:none}
+.skic.big{width:64px;height:64px}
+.skic.spin{animation:sbspin 1.1s cubic-bezier(.5,.1,.5,.9) infinite}
+.sbpick{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
+.sb .sbpick button{min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 10px;border-radius:18px}
+.sb .sbpick button:hover,.sb .sbpick button:focus-visible{background:#2B4A66;outline:2px solid var(--lantaarn);outline-offset:1px}
+.sbpick b{font:800 21px var(--display)}.sbpick small{font-size:14px;color:var(--quiet);font-weight:500}
+@media (max-width:380px){.sbpick{grid-template-columns:1fr}.sb .sbpick button{min-height:110px}}
+
+/* ---------- ski race: see-through over the map ---------- */
+body.racing #stage,body.racing .menubtn,body.racing .toasts,body.racing #marker{visibility:hidden}
+.sb.skigame{display:flex;flex-direction:column;justify-content:space-between;gap:12px;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;pointer-events:none;padding:max(14px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
+.skigame>*{pointer-events:auto}
+.sktop{align-self:center;width:min(560px,100%);display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:16px;row-gap:8px;padding:14px 18px;background:rgba(15,27,38,.86);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 34px rgba(0,0,0,.3)}
+.skrow{display:grid;grid-template-columns:minmax(60px,auto) 1fr;align-items:center;gap:12px}
+.skrow b{font:800 20px var(--display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:30vw}
+.skbar{height:16px;border-radius:8px;background:rgba(244,237,225,.14);overflow:hidden}
+.skbar i{display:block;height:100%;width:0;border-radius:8px;transition:width .15s linear}
+.skrow.me i{background:#E0533D}.skrow.them i{background:#5B9BD5}
+.skclock{grid-column:2;grid-row:1/3;align-self:center;font:800 30px var(--display);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right}
+.sksay{align-self:center;max-width:90%;text-align:center;opacity:0;transform:scale(.6);font:800 clamp(40px,10vmin,90px) var(--display);color:#fff;text-shadow:0 4px 24px rgba(0,0,0,.45),0 2px 0 rgba(15,27,38,.6);pointer-events:none;transition:opacity .2s,transform .2s}
+.sksay.show{opacity:1;transform:scale(1)}
+.sksay.count{font-size:clamp(80px,22vmin,170px)}
+.sksay.note{font:600 18px var(--body);text-shadow:none;background:rgba(15,27,38,.86);padding:10px 16px;border-radius:12px}
+.skbottom{align-self:center;width:min(560px,100%);display:flex;flex-direction:column;align-items:center;gap:10px}
+.skbottom .sbhelp{color:var(--snow);background:rgba(15,27,38,.72);padding:6px 14px;border-radius:12px;font-size:16px}
+.sb .sktap{width:100%;min-height:clamp(96px,17vh,140px);display:grid;grid-template-columns:auto auto;align-items:center;justify-content:center;column-gap:14px;border:0;border-radius:24px;background:var(--rood);color:#fff;font:800 clamp(30px,7vmin,44px) var(--display);box-shadow:0 7px 0 #9E3626,0 14px 30px rgba(0,0,0,.3);touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.sktap .skic{grid-row:span 2;width:56px;height:56px}
+.sktap small{font:500 14px var(--body);opacity:.8}
+.sb .sktap:active,.sktap.pop{translate:0 4px;box-shadow:0 3px 0 #9E3626,0 8px 20px rgba(0,0,0,.3)}
+.sktap.pop{animation:skpop .12s}
+@keyframes skpop{50%{scale:.97}}
+.skigame .sbquit{color:var(--snow);border-color:rgba(244,237,225,.3);background:rgba(15,27,38,.6)}
+.skigame.over .skbottom .sbhelp,.skigame.over .sktap{opacity:.35;pointer-events:none}
+.sbend.skend{position:fixed;inset:0;height:fit-content;margin:auto;width:min(440px,calc(100% - 32px));padding:28px 24px;background:rgba(15,27,38,.94);border:1px solid var(--line);border-radius:22px;color:var(--snow)}
+.sbend.skend p{color:var(--muted);font-size:19px}
+@media (max-height:560px){.skbottom .sbhelp{display:none}.sb .sktap{min-height:80px}}
+.sktap .skic path{stroke:#fff}.sktap .skic circle{fill:#fff}

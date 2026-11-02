@@ -4,7 +4,9 @@
 import { RECENT_MS, SYSTEM, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
 import { connectLive, type Live, type LiveEvent } from './live';
 import { esc } from './settings';
-import { createSnowball, SNOWBALL } from './snowball';
+import { createGames } from './games';
+import { SNOWBALL } from './snowball';
+import type { Stage } from './ski';
 
 const $ = (id: string) => document.getElementById(id)!;
 const COLORS = ['#E0533D', '#F0B45A', '#5B9BD5', '#7FB77E', '#B08BD9', '#E58FB1', '#4FB3B0'];
@@ -38,6 +40,8 @@ export function startLiveUI(opts: {
   active: string | null;
   /** unread messages of a trip changed (for the badge on its pill) */
   onUnread: (trip: string, n: number) => void;
+  /** the 3D map, for games played on it */
+  stage?: Stage;
 }) {
   const btn = $('chatBtn'), panel = $('chat'), who = $('who');
   const tripName = (id: string | null) => opts.trips.find((t) => t.id === id)?.naam || '';
@@ -56,7 +60,7 @@ export function startLiveUI(opts: {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ch]');
     if (!b) return;
     setOpen(false);
-    snowball.challenge(cur(), b.dataset.ch!, b.dataset.naam!);
+    games.pick(cur(), b.dataset.ch!, b.dataset.naam!);
   });
   who.onclick = () => setOpen(true);
   addEventListener('pointerdown', (e) => { if (open && !panel.contains(e.target as Node) && !btn.contains(e.target as Node) && !who.contains(e.target as Node)) setOpen(false); });
@@ -66,7 +70,7 @@ export function startLiveUI(opts: {
   const lives = new Map<string, Live>();
   for (const t of opts.trips) lives.set(t.id, connectLive({ apiBase: opts.apiBase, trip: t.id, active, onEvent: (e) => onEvent(t.id, e) }));
   const cur = () => (active ? lives.get(active) : undefined);
-  const snowball = createSnowball({ toast });
+  const games = createGames({ toast, stage: opts.stage });
 
   function unread(trip: string) {
     const l = lives.get(trip);
@@ -97,11 +101,11 @@ export function startLiveUI(opts: {
       setRead(trip, last ? last.id : 0);
     }
     const isActive = trip === active;
-    if (e.t === 'game') return snowball.onGame(l, e.game, e.ev);
-    if (e.t === 'error') return snowball.onError(e.error);
+    if (e.t === 'game') return games.onGame(l, e.game, e.ev);
+    if (e.t === 'error') return games.onError(e.error);
     if (e.t === 'msg') {
       if (isActive && open) { appendMessage(e.msg); scrollDown(); markRead(); }
-      else if (isActive && e.msg.from === SYSTEM) { if (!snowball.busy()) toast(`${SNOWBALL}<span>${esc(e.msg.text)}</span>`, 7000); }
+      else if (isActive && e.msg.from === SYSTEM) { if (!games.busy()) toast(`${SNOWBALL}<span>${esc(e.msg.text)}</span>`, 7000); }
       else if (isActive && e.msg.from !== l.state.me) toast(`${avatar(e.msg.from, e.msg.naam)}<span><b>${esc(e.msg.naam)}</b> ${esc(e.msg.text)}</span>`, 9000);
       if (e.msg.from === l.state.me && isActive) markRead();
       renderBadges();
@@ -136,7 +140,7 @@ export function startLiveUI(opts: {
   /** the snowball after someone's name: challenge them (only when they're online) */
   const challengeBtn = (l: Live, id: string, naam: string) =>
     id !== l.state.me && id !== SYSTEM && l.state.online.some((o) => o.id === id)
-      ? `<button type="button" class="sbch" data-ch="${esc(id)}" data-naam="${esc(naam)}" title="Daag ${esc(naam)} uit voor een sneeuwbalgevecht" aria-label="Daag ${esc(naam)} uit voor een sneeuwbalgevecht">${SNOWBALL}</button>`
+      ? `<button type="button" class="sbch" data-ch="${esc(id)}" data-naam="${esc(naam)}" title="Daag ${esc(naam)} uit voor een spelletje" aria-label="Daag ${esc(naam)} uit voor een spelletje">${SNOWBALL}</button>`
       : '';
   const msgHTML = (l: Live, m: ChatMessage, prev?: ChatMessage) => {
     const mine = m.from === l.state.me, sameDay = prev && day(prev.ts) === day(m.ts);

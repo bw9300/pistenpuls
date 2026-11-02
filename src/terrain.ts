@@ -113,12 +113,14 @@ function buildWorld(trip,elev,osm,opts){
 
   // pistes as draped ribbons
   const ribbons={b:[],r:[],z:[],s:[]},km={b:0,r:0,z:0,s:0};
+  const runs=[]; // whole pistes inside the map, as paths over the snow (for the ski race)
   const lift=Math.max(2.5,Wm/3000);
   for(const p of osm.pistes){
     const k=pisteClass(p.diff);const pts=p.g.map(([lo,la])=>proj(lo,la));
     const dense=[];for(let i=0;i<pts.length-1;i++){const [x0,z0]=pts[i],[x1,z1]=pts[i+1],L=Math.hypot(x1-x0,z1-z0),m=Math.max(1,Math.ceil(L/12));if(inside(x0,z0))km[k]+=L/1000;
       for(let j=0;j<m;j++)dense.push([x0+(x1-x0)*j/m,z0+(z1-z0)*j/m])}
     if(pts.length)dense.push(pts[pts.length-1]);
+    if(dense.length>1&&dense.every(([x,z])=>inside(x,z)))runs.push({k,pts:dense.map(([x,z])=>[x,hAt(x,z)+lift,z])});
     const half=k==='s'?7:11, R=ribbons[k];let prevL=null,prevR=null;
     for(let i=0;i<dense.length;i++){
       const [x,z]=dense[i];if(!inside(x,z)){prevL=prevR=null;continue}
@@ -154,7 +156,7 @@ function buildWorld(trip,elev,osm,opts){
     const grp=bottoms.filter(q=>near(best,q));village=[grp.reduce((s,p)=>s+p[0],0)/grp.length,0,grp.reduce((s,p)=>s+p[2],0)/grp.length];}
   else{let lo=1e9;village=[0,0,0];for(let r=0;r<=rows;r+=4)for(let c=0;c<=cols;c+=4){const y=gy(c,r);if(y<lo){lo=y;village=[cx(c),y,cz(r)]}}}
   village[1]=hAt(village[0],village[2]);
-  return {P,C,trees,treeStep:step,ribbons,cable,pylon,station,km,liftCount,summit,summitName,village,hAt,Y,alt,proj,unproj,inside,Wm,Dm,R:Math.max(Wm,Dm)/2,bottom,
+  return {P,C,trees,treeStep:step,ribbons,runs,cable,pylon,station,km,liftCount,summit,summitName,village,hAt,Y,alt,proj,unproj,inside,Wm,Dm,R:Math.max(Wm,Dm)/2,bottom,
           topAlt:Math.round(alt(summit[1])),dalAlt:Math.round(alt(village[1]))};
 }
 
