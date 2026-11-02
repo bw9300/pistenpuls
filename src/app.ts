@@ -7,6 +7,7 @@ import {PI,hash2,buildWorld,buildHouses,demFromGrid,osmFromStore,housesFromStore
 import {loadTerrain,loadOsm,lineRaster,WX,fetchWeather,fetchSnow,fetchWebcams,fetchMap} from './data';
 import {STORE,esc,tripPickerHTML,wirePicker,readPicker,startWizard} from './settings';
 import {startLiveUI} from './live-ui';
+import {createControls} from './controls';
 
 export function startApp(RT){
 const SETTINGS=STORE.get();
@@ -45,6 +46,7 @@ function fillCams(T){
 
 // ---------- three setup ----------
 const canvas=$('gl');
+const controls=createControls(canvas,{idleMs:CONFIG.idleSeconds*1000,world:()=>shown&&shown.world});
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));
 renderer.setClearColor(0x000000,0);
@@ -296,7 +298,7 @@ let trip=0,sc=-2,scT=0,paused=false,flight=null,shown=null;
 // "Huidige reis vasthouden": remembered in this browser
 let pinned=false;try{const v=localStorage.getItem('pp-pin'),i=TRIPS.findIndex(t=>t.id===v);if(i>=0&&TRIPS.length>1){pinned=true;trip=i}}catch(e){}
 function savePin(i=trip){try{pinned?localStorage.setItem('pp-pin',TRIPS[i].id):localStorage.removeItem('pp-pin')}catch(e){}$('tabs').classList.toggle('pinned',pinned);$('pin').checked=pinned}
-function showScene(i){sceneEls.forEach(e=>e.classList.toggle('on',+e.dataset.s===i));
+function showScene(i){controls.returnNow();sceneEls.forEach(e=>e.classList.toggle('on',+e.dataset.s===i));
   segEls.forEach((e,k)=>{e.classList.toggle('on',k===i);e.classList.toggle('done',i>=0&&k<i);if(k>=i)e.querySelector('i').style.width='0'});
   const T=TRIPS[trip];if(i>=0&&T.world){const c=SCENE_CAM[i];orbitGoal.r=c.r*T.world.R*camZoom();orbitGoal.h=c.h*T.world.R*camZoom();focusGoal=sceneFocus(T.world,i)}}
 function swapTo(T){if(shown&&shown.group)shown.group.visible=false;shown=T;T.group.visible=true;fillTrip(T);applyTod();if(liveUI)liveUI.setTrip(T.id);
@@ -389,16 +391,18 @@ function frame(now){
       else{flight.t=.42;if(flight.T.state==='error'){flight=null;wolk.style.opacity=0;sc=0;scT=0;showScene(0)}}
     }
     if(flight&&flight.t>=1){flight=null;wolk.style.opacity=0;sc=0;scT=0;showScene(0)}
-  } else if(!paused&&sc>=0){scT+=dt;if(scT>=SCENE_DUR)next()}
+  } else if(!paused&&sc>=0&&!controls.holding()){scT+=dt;if(scT>=SCENE_DUR)next()}
   if(sc>=0)segEls[sc].querySelector('i').style.width=Math.min(100,scT/SCENE_DUR*100)+'%';
   const T=shown;if(!T||!T.world){return}
   const w=T.world,k=1-Math.exp(-dt*.6);
   orbit.r+=(orbitGoal.r-orbit.r)*k;orbit.h+=(orbitGoal.h-orbit.h)*k;target.lerp(focusGoal,k);
   if(flight&&!flight.swapped)orbit.h+=w.R*.5*dt;
   ang+=dt*(reduce?.006:.035);
-  camera.position.set(target.x+Math.sin(ang)*orbit.r,target.y+orbit.h,target.z+Math.cos(ang)*orbit.r);
+  // the tour's camera, unless the user is exploring (controls.ts)
+  const cv=flight?(controls.release(),{target,ang,r:orbit.r,h:orbit.h}):controls.update(dt,{target,ang,r:orbit.r,h:orbit.h});
+  camera.position.set(cv.target.x+Math.sin(cv.ang)*cv.r,cv.target.y+cv.h,cv.target.z+Math.cos(cv.ang)*cv.r);
   const g=w.hAt(camera.position.x,camera.position.z)+w.R*.03;if(camera.position.y<g)camera.position.y=g;
-  camera.lookAt(target);
+  camera.lookAt(cv.target);
   todT-=dt;if(todT<=0){applyTod();todT=2}
   // snow follows the camera
   const wn=weatherNow(T),kw=1-Math.exp(-dt*.4);for(const key in wxCur)wxCur[key]+=(wn[key]-wxCur[key])*kw;

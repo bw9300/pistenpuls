@@ -258,3 +258,6 @@ body.wizard .toasts,body.wizard .chat{display:none}
 .mob .clock{order:2;margin-left:auto}
 .mob .who{order:3}
 .mob .tabs{order:4;flex:1 1 auto;width:auto}
+/* explore the map yourself (controls.ts) */
+#gl{cursor:grab}
+#gl.grabbing{cursor:grabbing}

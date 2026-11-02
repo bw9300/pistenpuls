@@ -26,6 +26,7 @@ export const CONFIG = {
   detail: 'midden' as 'laag' | 'midden' | 'hoog', // 'laag' (grove facetten), 'midden' of 'hoog'
   exaggeration: 1.15, // bergen iets hoger maken voor de sfeer
   sceneSeconds: 20,
+  idleSeconds: 8, // zelf rondkijken: na zoveel seconden niets doen terug naar de rondvlucht
   terrainZoom: 12,
   terrainUrls: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png', 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png'],
   overpassUrls: ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'],
