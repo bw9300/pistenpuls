@@ -9,6 +9,7 @@
     "check": "tsc --noEmit -p . && tsc --noEmit -p server",
     "preview:cf": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
+    "deploy:preview": "npm run build && wrangler deploy --env preview",
     "area:add": "tsx tools/add-area.ts"
   },
   "dependencies": {

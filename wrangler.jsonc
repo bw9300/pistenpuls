@@ -7,6 +7,14 @@
   "assets": { "directory": "./dist", "not_found_handling": "none" },
   // live: one Durable Object (with its own SQLite) per group
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "LiveRoom" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveRoom"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveRoom"] }],
   // secrets: npx wrangler secret put WINDY_KEY
+
+  "env": {
+    // npm run deploy:preview → a separate worker (pistenpuls-preview) with its own live data
+    // secrets: npx wrangler secret put WINDY_KEY --env preview
+    "preview": {
+      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "LiveRoom" }] }
+    }
+  }
 }

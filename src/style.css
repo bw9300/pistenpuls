@@ -256,3 +256,5 @@ body.chatopen .menubtn{opacity:1}
 .mob .toasts{top:auto;bottom:80px}
 body.wizard .toasts,body.wizard .chat{display:none}
 @media (prefers-reduced-motion: reduce){.toast{animation:none;transition:none}}
+/* ===== preview deployment label ===== */
+.preview .brand b::after,.preview .wizhead b::after{content:"PREVIEW";margin-left:12px;padding:3px 8px;border-radius:6px;background:var(--lantaarn);color:var(--night);font:700 .45em/1 var(--body);letter-spacing:.1em;vertical-align:middle}
