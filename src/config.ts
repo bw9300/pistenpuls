@@ -39,10 +39,12 @@ export interface RuntimeConfig {
   apiBase: string;
   /** webcams via /api/webcams (needs the server with WINDY_KEY); false = 3D view instead */
   webcams: boolean;
+  /** live (who's watching, messages) via /api/live (needs the server); false = hidden */
+  live: boolean;
 }
 
 export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
-  const fallback: RuntimeConfig = { apiBase: '', webcams: false };
+  const fallback: RuntimeConfig = { apiBase: '', webcams: false, live: false };
   try {
     const r = await fetch(import.meta.env.BASE_URL + 'config.json', { cache: 'no-cache' });
     if (r.ok) return { ...fallback, ...(await r.json()) };

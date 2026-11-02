@@ -26,7 +26,10 @@
       <b>PISTENPULS</b><span id="topCount"></span><em id="wxNow" hidden></em>
     </div>
     <div class="tabs tile" id="tabs"></div>
-    <div class="clock tile"><div class="num" id="clock">--:--</div><div id="date"></div></div>
+    <div class="topright">
+      <button type="button" class="who tile" id="who" aria-label="Wie kijkt er mee" hidden></button>
+      <div class="clock tile"><div class="num" id="clock">--:--</div><div id="date"></div></div>
+    </div>
   </div>
 
   <div id="marker"><div class="chip tile"><svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><ellipse cx="14" cy="14" rx="12" ry="5" fill="none" stroke="#F0B45A" stroke-width="2"/><circle cx="14" cy="14" r="3" fill="#F0B45A"/></svg><div><b id="mkName"></b><small id="mkSub">Hoogste bergstation</small></div></div><div class="stem"></div><div class="dot"></div></div>
@@ -129,6 +132,9 @@
   </form>
 </div>
 
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<button id="chatBtn" class="menubtn chatbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="chat" aria-label="Groep openen"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M4 5h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9l-4 3.5V15H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><b id="chatBadge"></b></button>
+<div id="chat" class="menu chat" role="dialog" aria-label="Groep" hidden></div>
 <button id="menuBtn" class="menubtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="menu" aria-label="Menu openen"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h14"/><path d="M4 11h14"/><path d="M4 16h14"/></g></svg></button>
 <div id="menu" class="menu" role="dialog" aria-label="Menu" hidden>
   <div class="mtabs" role="tablist" aria-label="Menu">

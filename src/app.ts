@@ -6,6 +6,7 @@ import {AREAS} from './areas';
 import {PI,hash2,buildWorld,buildHouses,demFromGrid,osmFromStore,housesFromStore} from './terrain';
 import {loadTerrain,loadOsm,lineRaster,WX,fetchWeather,fetchSnow,fetchWebcams,fetchMap} from './data';
 import {STORE,esc,tripPickerHTML,wirePicker,readPicker,startWizard} from './settings';
+import {startLiveUI} from './live-ui';
 
 export function startApp(RT){
 const SETTINGS=STORE.get();
@@ -298,7 +299,7 @@ function savePin(i=trip){try{pinned?localStorage.setItem('pp-pin',TRIPS[i].id):l
 function showScene(i){sceneEls.forEach(e=>e.classList.toggle('on',+e.dataset.s===i));
   segEls.forEach((e,k)=>{e.classList.toggle('on',k===i);e.classList.toggle('done',i>=0&&k<i);if(k>=i)e.querySelector('i').style.width='0'});
   const T=TRIPS[trip];if(i>=0&&T.world){const c=SCENE_CAM[i];orbitGoal.r=c.r*T.world.R*camZoom();orbitGoal.h=c.h*T.world.R*camZoom();focusGoal=sceneFocus(T.world,i)}}
-function swapTo(T){if(shown&&shown.group)shown.group.visible=false;shown=T;T.group.visible=true;fillTrip(T);applyTod();
+function swapTo(T){if(shown&&shown.group)shown.group.visible=false;shown=T;T.group.visible=true;fillTrip(T);applyTod();if(liveUI)liveUI.setTrip(T.id);
   const w=T.world;scene.fog.near=w.R*1.6;scene.fog.far=w.R*7;stars.scale.setScalar(w.R*10);camera.near=w.R*.002;camera.far=w.R*30;camera.updateProjectionMatrix();
   camCams.forEach(c=>{c.near=w.R*.002;c.far=w.R*30;c.updateProjectionMatrix()});snMat.size=Math.max(4,w.R*.002);}
 async function goTrip(n){
@@ -361,6 +362,8 @@ function fit(){VW=innerWidth;VH=innerHeight;
 addEventListener('resize',fit);document.addEventListener('visibilitychange',fit);fit();
 
 // ---------- start ----------
+const liveUI=RT.live?startLiveUI({apiBase:RT.apiBase,naam:NAAM,trip:null}):null;
+$('chatBtn').hidden=!RT.live;
 showScene(-2);tickClock();setInterval(tickClock,1000);
 setInterval(()=>TRIPS.forEach(T=>{if(T.state==='ready')loadWeather(T)}),30*60*1000);
 setInterval(()=>TRIPS.forEach(T=>{if(T.state==='ready')loadSnow(T)}),10*60*1000);

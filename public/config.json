@@ -1,4 +1,5 @@
 {
   "apiBase": "",
-  "webcams": true
+  "webcams": true,
+  "live": true
 }

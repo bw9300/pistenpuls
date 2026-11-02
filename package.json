@@ -6,7 +6,7 @@
     "dev": "concurrently -k -n web,api -c blue,green \"vite\" \"tsx watch --env-file-if-exists=.env server/node.ts\"",
     "build": "vite build",
     "start": "tsx --env-file-if-exists=.env server/node.ts",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit -p . && tsc --noEmit -p server",
     "preview:cf": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
     "area:add": "tsx tools/add-area.ts"
@@ -15,12 +15,14 @@
     "@hono/node-server": "^2.1.6",
     "hono": "^4.13.16",
     "three": "^0.128.0",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "ws": "^8.22.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261102.1",
     "@types/node": "^26.6.6",
     "@types/pngjs": "^6.0.5",
+    "@types/ws": "^8.18.2",
     "concurrently": "^10.0.6",
     "pngjs": "^7.0.0",
     "typescript": "^7.0.2",

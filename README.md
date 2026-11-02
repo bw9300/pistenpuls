@@ -32,6 +32,17 @@ tools/          add-area.ts
 public/         config.json (per deployment aan te passen)
 ```
 
+## Live: samen aftellen
+
+Via de chatknop rechtsonder maak je een groep. Deel de uitnodigingslink (`…/#groep=sneeuw-…`): wie hem opent, doet mee.
+Je ziet wie er nu meekijkt (topbalk, met de reis die ze bekijken), wie eerder online was, en je kunt berichten sturen.
+Er zijn geen accounts: de groepscode is de sleutel, dus deel de link alleen met de groep.
+
+- `shared/live.ts`: de berichten tussen browser en server
+- `server/room.ts`: de logica van een groep (platformloos)
+- Cloudflare: één Durable Object per groep, met eigen SQLite (`server/cloudflare.ts`)
+- Node: `ws` + een SQLite-bestand in `data/` (`server/node.ts`, Node 22.13 of nieuwer)
+
 ## Een skigebied toevoegen
 
 ```sh
@@ -46,10 +57,10 @@ Sneeuwhoogtes komen van avalanche.report: dat dekt Tirol, Zuid-Tirol, Trentino e
 
 ## Hosten
 
-| Waar | Hoe | API (webcams, straks live) |
+| Waar | Hoe | API (webcams, live) |
 |---|---|---|
 | Cloudflare | `npx wrangler login` (eenmalig), `npx wrangler secret put WINDY_KEY`, dan `npm run deploy` | ja |
 | Elke Node-host (VPS, Fly, Railway, Pi) | `npm run build`, dan `WINDY_KEY=... npm start` (poort via `PORT`) | ja |
-| Alleen statisch (GitHub Pages, Netlify) | `npm run build`, upload `dist/`, zet `"webcams": false` in `dist/config.json` | nee |
+| Alleen statisch (GitHub Pages, Netlify) | `npm run build`, upload `dist/`, zet `"webcams": false` en `"live": false` in `dist/config.json` | nee |
 
 Draait de API op een ander adres dan de frontend, zet dat adres dan in `config.json` › `apiBase`.

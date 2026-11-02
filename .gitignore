@@ -6,3 +6,4 @@ dist/
 .DS_Store
 # original single-file build: contains the Windy key, kept locally as reference only
 reference/
+data/

@@ -4,6 +4,9 @@
   "main": "server/cloudflare.ts",
   "compatibility_date": "2026-10-01",
   // the built frontend; requests that match no file go to the worker (/api/*)
-  "assets": { "directory": "./dist", "not_found_handling": "none" }
+  "assets": { "directory": "./dist", "not_found_handling": "none" },
+  // live: one Durable Object (with its own SQLite) per group
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "LiveRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveRoom"] }]
   // secrets: npx wrangler secret put WINDY_KEY
 }
