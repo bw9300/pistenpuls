@@ -307,7 +307,7 @@ let pinned=false;try{const v=localStorage.getItem('pp-pin'),i=TRIPS.findIndex(t=
 function savePin(i=trip){try{pinned?localStorage.setItem('pp-pin',TRIPS[i].id):localStorage.removeItem('pp-pin')}catch(e){}$('tabs').classList.toggle('pinned',pinned);tabTitles()}
 // trip pills: click another trip to fly there, click the current one to hold it (or let go)
 function tabTitles(){tabEls.forEach((e,i)=>e.title=i!==trip?`Naar ${TRIPS[i].naam}`:pinned?'Vastgehouden. Klik om weer langs alle reizen te gaan.':'Klik om deze reis vast te houden')}
-function showScene(i){controls.returnNow();sceneEls.forEach(e=>e.classList.toggle('on',+e.dataset.s===i));
+function showScene(i){controls.returnNow();if(i!==4&&apresMode)setApresMode(false);sceneEls.forEach(e=>e.classList.toggle('on',+e.dataset.s===i));
   segEls.forEach((e,k)=>{e.classList.toggle('on',k===i);e.classList.toggle('done',i>=0&&k<i);if(k>=i)e.querySelector('i').style.width='0'});
   const T=TRIPS[trip];if(i>=0&&T.world){const c=SCENE_CAM[i];orbitGoal.r=c.r*T.world.R*camZoom();orbitGoal.h=c.h*T.world.R*camZoom();focusGoal=sceneFocus(T.world,i)}}
 function swapTo(T){if(shown&&shown.group)shown.group.visible=false;shown=T;T.group.visible=true;fillTrip(T);applyTod();if(liveUI)liveUI.setTrip(T.id);
@@ -394,8 +394,12 @@ addEventListener('resize',fit);document.addEventListener('visibilitychange',fit)
 addEventListener('resize',queueTopbar);document.fonts&&document.fonts.ready.then(queueTopbar);queueTopbar();
 
 // ---------- après-ski pins (scene 'Sfeer nu'); the scene waits while one is open ----------
-let apresOpen=false;
+let apresOpen=false,apresMode=false;
 const apres=createApres($('apres'),o=>{apresOpen=o});
+/** 'Bekijk op de kaart': the info of 'Sfeer nu' slides away so the whole map is free for the pins; the scene waits */
+function setApresMode(on){apresMode=on;document.body.classList.toggle('apresmode',on);$('apresBack').hidden=!on;if(on)$('apresBack').focus()}
+$('apresBtn').onclick=()=>setApresMode(true);
+$('apresBack').onclick=()=>setApresMode(false);
 
 // ---------- the map as a playing field (ski race, src/ski.ts) ----------
 let drive=null; // set by a game: (dt)=>{pos,look} steers the camera, the tour waits
@@ -437,7 +441,7 @@ function frame(now){
       else{flight.t=.42;if(flight.T.state==='error'){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}}
     }
     if(flight&&flight.t>=1){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}
-  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()&&!drive&&!apresOpen){scT+=dt;if(scT>=SCENE_DUR)next()}
+  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()&&!drive&&!apresOpen&&!apresMode){scT+=dt;if(scT>=SCENE_DUR)next()}
   if(sc>=0)segEls[sc].querySelector('i').style.width=(scenePin!==null?100:Math.min(100,scT/SCENE_DUR*100))+'%';
   const T=shown;if(!T||!T.world){return}
   const w=T.world,k=1-Math.exp(-dt*.6);
