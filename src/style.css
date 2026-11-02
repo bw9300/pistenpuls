@@ -408,3 +408,6 @@ body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:h
 @keyframes sbshake{25%{translate:-8px 2px}50%{translate:7px -2px}75%{translate:-4px 1px}}
 @media (max-height:500px){.sbhelp{display:none}.sb .sbbtns button{min-height:64px}}
 @media (prefers-reduced-motion: reduce){.sb.shake .sbfield,.sbcard,.sbend{animation:none}}
+.sbic.spin{animation:sbspin 1.1s cubic-bezier(.5,.1,.5,.9) infinite}
+@keyframes sbspin{50%{transform:translateY(-10px) rotate(180deg)}to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.sbic.spin{animation-duration:3s}}

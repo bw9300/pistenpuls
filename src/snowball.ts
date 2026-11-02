@@ -25,7 +25,7 @@ export function createSnowball(opts: { toast(html: string, ms: number): void }) 
   const mine = new Set<string>();
   /** challenged from this tab, waiting for the room to confirm */
   let pending: { live: Live; to: string; naam: string } | null = null;
-  let box: HTMLElement | null = null, boxGame = '', screen: ReturnType<typeof gameScreen> | null = null, inviteT = 0;
+  let box: HTMLElement | null = null, boxGame = '', screen: ReturnType<typeof gameScreen> | null = null, inviteT = 0, loadT = 0;
 
   function overlay(game: string, html: string) {
     close();
@@ -41,12 +41,23 @@ export function createSnowball(opts: { toast(html: string, ms: number): void }) 
   }
   function close() {
     clearInterval(inviteT);
+    clearTimeout(loadT);
     screen?.stop();
     screen = null;
     box?.remove();
     box = null;
     boxGame = '';
     document.body.classList.remove('sbopen');
+  }
+
+  /** waiting for the room: a spinning snowball, so it's clear something is happening */
+  function showLoading(game: string, text: string) {
+    overlay(game, `<div class="sbcard sbload">${SNOWBALL.replace('sbic', 'sbic big spin')}<h2>${text}</h2><p>Even geduld…</p></div>`);
+    loadT = window.setTimeout(() => {
+      pending = null;
+      close();
+      opts.toast(`${SNOWBALL}<span>Het sneeuwbalgevecht laadt niet. Controleer je verbinding en probeer het nog eens.</span>`, 6000);
+    }, 10_000);
   }
 
   // ---------- invite (to me) and waiting (I challenged) ----------
@@ -57,7 +68,7 @@ export function createSnowball(opts: { toast(html: string, ms: number): void }) 
       <p class="sbleft" data-left></p>
       <div class="sbrow"><button type="button" data-no>Nee, nu niet</button><button type="button" class="primary" data-yes>Ja, doe ik!</button></div></div>`);
     countdown(b, g.left);
-    b.querySelector<HTMLButtonElement>('[data-yes]')!.onclick = () => { mine.add(g.id); live.answer(g.id, true); };
+    b.querySelector<HTMLButtonElement>('[data-yes]')!.onclick = () => { mine.add(g.id); live.answer(g.id, true); showLoading(g.id, 'Sneeuwbalgevecht laden'); };
     b.querySelector<HTMLButtonElement>('[data-no]')!.onclick = () => { live.answer(g.id, false); close(); };
     b.querySelector<HTMLButtonElement>('[data-yes]')!.focus();
     navigator.vibrate?.([120, 80, 120]);
@@ -111,6 +122,7 @@ export function createSnowball(opts: { toast(html: string, ms: number): void }) 
     if (!live || live.state.status !== 'online') return opts.toast(`${SNOWBALL}<span>Geen verbinding, probeer het zo nog eens.</span>`, 4000);
     pending = { live, to, naam };
     live.challenge(to);
+    showLoading('', `Uitdaging naar ${esc(naam)} versturen`);
   }
 
   return {
@@ -118,7 +130,7 @@ export function createSnowball(opts: { toast(html: string, ms: number): void }) 
     challenge,
     /** something's on screen (no toasts about games then) */
     busy: () => !!box,
-    onError(error: string) { pending = null; opts.toast(`${SNOWBALL}<span>${esc(error)}</span>`, 5000); },
+    onError(error: string) { pending = null; if (box && !screen) close(); opts.toast(`${SNOWBALL}<span>${esc(error)}</span>`, 5000); },
   };
 }
 
