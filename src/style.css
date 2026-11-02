@@ -252,3 +252,9 @@ body.wizard .toasts,body.wizard .chat{display:none}
 @media (prefers-reduced-motion: reduce){.toast{animation:none;transition:none}}
 /* ===== preview deployment label ===== */
 .preview .brand b::after,.preview .wizhead b::after{content:"PREVIEW";margin-left:12px;padding:3px 8px;border-radius:6px;background:var(--lantaarn);color:var(--night);font:700 .45em/1 var(--body);letter-spacing:.1em;vertical-align:middle}
+/* phone: brand and clock on the first row (clock always top right), who's watching and the trip tabs below */
+.mob .topright{display:contents}
+.mob .brand{order:1;min-width:0}
+.mob .clock{order:2;margin-left:auto}
+.mob .who{order:3}
+.mob .tabs{order:4;flex:1 1 auto;width:auto}
