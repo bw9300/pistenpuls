@@ -1,9 +1,10 @@
 // Live in the dashboard, per trip: who's watching (top bar), the panel with messages, toasts for news.
 // Connected to all my trips at once: the trip on screen gets the panel and toasts, the others count unread messages
 // (badge on their trip pill).
-import { RECENT_MS, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
+import { RECENT_MS, SYSTEM, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
 import { connectLive, type Live, type LiveEvent } from './live';
 import { esc } from './settings';
+import { createSnowball, SNOWBALL } from './snowball';
 
 const $ = (id: string) => document.getElementById(id)!;
 const COLORS = ['#E0533D', '#F0B45A', '#5B9BD5', '#7FB77E', '#B08BD9', '#E58FB1', '#4FB3B0'];
@@ -51,6 +52,12 @@ export function startLiveUI(opts: {
     if (o) { markRead(); render(); scrollDown(); setTimeout(() => (panel.querySelector('#chatText') as HTMLInputElement | null)?.focus(), 30); }
   }
   btn.onclick = () => setOpen(!open);
+  panel.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ch]');
+    if (!b) return;
+    setOpen(false);
+    snowball.challenge(cur(), b.dataset.ch!, b.dataset.naam!);
+  });
   who.onclick = () => setOpen(true);
   addEventListener('pointerdown', (e) => { if (open && !panel.contains(e.target as Node) && !btn.contains(e.target as Node) && !who.contains(e.target as Node)) setOpen(false); });
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); btn.focus(); } });
@@ -59,6 +66,7 @@ export function startLiveUI(opts: {
   const lives = new Map<string, Live>();
   for (const t of opts.trips) lives.set(t.id, connectLive({ apiBase: opts.apiBase, trip: t.id, active, onEvent: (e) => onEvent(t.id, e) }));
   const cur = () => (active ? lives.get(active) : undefined);
+  const snowball = createSnowball({ toast });
 
   function unread(trip: string) {
     const l = lives.get(trip);
@@ -89,8 +97,11 @@ export function startLiveUI(opts: {
       setRead(trip, last ? last.id : 0);
     }
     const isActive = trip === active;
+    if (e.t === 'game') return snowball.onGame(l, e.game, e.ev);
+    if (e.t === 'error') return snowball.onError(e.error);
     if (e.t === 'msg') {
       if (isActive && open) { appendMessage(e.msg); scrollDown(); markRead(); }
+      else if (isActive && e.msg.from === SYSTEM) { if (!snowball.busy()) toast(`${SNOWBALL}<span>${esc(e.msg.text)}</span>`, 7000); }
       else if (isActive && e.msg.from !== l.state.me) toast(`${avatar(e.msg.from, e.msg.naam)}<span><b>${esc(e.msg.naam)}</b> ${esc(e.msg.text)}</span>`, 9000);
       if (e.msg.from === l.state.me && isActive) markRead();
       renderBadges();
@@ -122,18 +133,25 @@ export function startLiveUI(opts: {
       + `<span class="wlbl">${others.length ? `${others.length + 1} online` : 'alleen jij'}</span>`;
   }
 
-  const msgHTML = (me: string, m: ChatMessage, prev?: ChatMessage) => {
-    const mine = m.from === me, sameDay = prev && day(prev.ts) === day(m.ts);
+  /** the snowball after someone's name: challenge them (only when they're online) */
+  const challengeBtn = (l: Live, id: string, naam: string) =>
+    id !== l.state.me && id !== SYSTEM && l.state.online.some((o) => o.id === id)
+      ? `<button type="button" class="sbch" data-ch="${esc(id)}" data-naam="${esc(naam)}" title="Daag ${esc(naam)} uit voor een sneeuwbalgevecht" aria-label="Daag ${esc(naam)} uit voor een sneeuwbalgevecht">${SNOWBALL}</button>`
+      : '';
+  const msgHTML = (l: Live, m: ChatMessage, prev?: ChatMessage) => {
+    const mine = m.from === l.state.me, sameDay = prev && day(prev.ts) === day(m.ts);
+    const head = sameDay ? '' : `<li class="day">${day(m.ts)}</li>`;
+    if (m.from === SYSTEM) return head + `<li class="sys"><p>${esc(m.text)}</p><time>${time(m.ts)}</time></li>`;
     const grouped = sameDay && prev!.from === m.from && m.ts - prev!.ts < 5 * 60_000;
-    return (sameDay ? '' : `<li class="day">${day(m.ts)}</li>`)
-      + `<li class="m${mine ? ' mine' : ''}${grouped ? ' cont' : ''}">${grouped || mine ? '' : avatar(m.from, m.naam)}<div>${grouped || mine ? '' : `<b>${esc(m.naam)}</b>`}<p>${esc(m.text)}</p><time>${time(m.ts)}</time></div></li>`;
+    return head
+      + `<li class="m${mine ? ' mine' : ''}${grouped ? ' cont' : ''}">${grouped || mine ? '' : avatar(m.from, m.naam)}<div>${grouped || mine ? '' : `<b>${esc(m.naam)}${challengeBtn(l, m.from, m.naam)}</b>`}<p>${esc(m.text)}</p><time>${time(m.ts)}</time></div></li>`;
   };
   function appendMessage(m: ChatMessage) {
     const list = panel.querySelector('#chatMsgs'), l = cur();
     if (!list || !l) return;
     list.querySelector('.empty')?.remove();
     const msgs = l.state.messages;
-    list.insertAdjacentHTML('beforeend', msgHTML(l.state.me, m, msgs[msgs.length - 2]));
+    list.insertAdjacentHTML('beforeend', msgHTML(l, m, msgs[msgs.length - 2]));
   }
   const scrollDown = () => { const l = panel.querySelector('#chatMsgs'); if (l) l.scrollTop = l.scrollHeight; };
 
@@ -146,13 +164,13 @@ export function startLiveUI(opts: {
     const prevInput = panel.querySelector('#chatText') as HTMLInputElement | null, typed = prevInput?.value || '', focused = document.activeElement === prevInput;
     const s = l.state;
     const status = s.status === 'online' ? '' : s.status === 'connecting' ? 'Verbinden…' : 'Geen verbinding, opnieuw proberen…';
-    const people = s.online.map((o) => `<li>${avatar(o.id, o.naam, !o.viewing.visible)}<span><b>${esc(o.naam)}${o.id === s.me ? ' (jij)' : ''}</b><small>${viewingText(o)}</small></span></li>`).join('');
+    const people = s.online.map((o) => `<li>${avatar(o.id, o.naam, !o.viewing.visible)}<span><b>${esc(o.naam)}${o.id === s.me ? ' (jij)' : ''}</b><small>${viewingText(o)}</small></span>${challengeBtn(l, o.id, o.naam)}</li>`).join('');
     const rec = recent(l).map((m) => `<li>${avatar(m.id, m.naam, true)}<span><b>${esc(m.naam)}</b><small>${ago(m.lastSeen)}</small></span></li>`).join('');
     panel.innerHTML = `
       <div class="chead"><h4>${esc(tripName(active))} · nu online</h4>${status ? `<span class="cstatus">${status}</span>` : ''}</div>
       <ul class="people">${people}</ul>
       ${rec ? `<h4>Laatste uur online</h4><ul class="people">${rec}</ul>` : ''}
-      <ul class="msgs" id="chatMsgs">${s.messages.map((m, i) => msgHTML(s.me, m, s.messages[i - 1])).join('') || '<li class="empty">Nog geen berichten. Zeg eens hallo!</li>'}</ul>
+      <ul class="msgs" id="chatMsgs">${s.messages.map((m, i) => msgHTML(l, m, s.messages[i - 1])).join('') || '<li class="empty">Nog geen berichten. Zeg eens hallo!</li>'}</ul>
       <form class="csend" id="chatForm"><label class="vh" for="chatText">Bericht</label><input id="chatText" maxlength="500" autocomplete="off" placeholder="Bericht aan ${esc(tripName(active))}"><button type="submit" class="primary">Stuur</button></form>`;
     ($('chatForm') as HTMLFormElement).onsubmit = (e) => {
       e.preventDefault();

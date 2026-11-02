@@ -1,7 +1,8 @@
 // One room per trip: who is online, who was here when, and the messages.
 // No platform code: cloudflare.ts (Durable Object) and node.ts (ws) provide the connections and the storage.
 // Who someone is comes from the server (session checked before the connection reaches the room), never from the browser.
-import { HISTORY, MAX_TEXT, RECENT_MS, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live.ts';
+import { Snowball } from './snowball.ts';
+import { HISTORY, MAX_TEXT, RECENT_MS, SYSTEM, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live.ts';
 
 /** what a connection knows about its user; set by the adapter when the connection is accepted */
 export interface ConnMeta {
@@ -38,7 +39,15 @@ export interface RoomHost {
 const clean = (s: unknown, max: number) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 
 export class Room {
-  constructor(private host: RoomHost) {}
+  private snowball: Snowball;
+
+  constructor(private host: RoomHost) {
+    this.snowball = new Snowball({
+      online: (id) => this.online().find((o) => o.id === id)?.naam ?? null,
+      sendTo: (id, msg) => { for (const c of this.host.connections()) { const m = c.getMeta(); if (m?.ready && m.id === id) this.send(c, msg); } },
+      system: (text) => this.broadcast({ t: 'msg', msg: this.host.storage.addMessage({ from: SYSTEM, naam: 'Pistenpuls', text, ts: Date.now() }) }),
+    });
+  }
 
   onMessage(conn: Conn, raw: string) {
     let m: ClientMsg;
@@ -51,6 +60,7 @@ export class Room {
       this.host.storage.saveMember({ id: me.id, naam: me.naam, lastSeen: Date.now() });
       this.send(conn, { t: 'state', me: me.id, online: this.online(), members: this.host.storage.members(), messages: this.host.storage.messages(HISTORY) });
       this.broadcastPresence();
+      this.snowball.resend(me.id);
       return;
     }
     if (!me.ready) return; // everything else needs a hello first
@@ -63,7 +73,12 @@ export class Room {
       if (!text) return;
       const msg = this.host.storage.addMessage({ from: me.id, naam: me.naam, text, ts: Date.now() });
       this.broadcast({ t: 'msg', msg });
-    }
+    } else if (m.t === 'challenge') {
+      const error = this.snowball.challenge({ id: me.id, naam: me.naam }, String(m.to));
+      if (error) this.send(conn, { t: 'error', error });
+    } else if (m.t === 'answer') this.snowball.answer(me.id, String(m.game), !!m.accept);
+    else if (m.t === 'play') { if (m.a === 'throw' || m.a === 'duck') this.snowball.play(me.id, String(m.game), m.a); }
+    else if (m.t === 'quit') this.snowball.quit(me.id, String(m.game));
   }
 
   /** call after the connection is gone (it must no longer be in connections()) */
@@ -73,6 +88,7 @@ export class Room {
     // still online in another tab? then 'last seen' is now anyway, harmless
     this.host.storage.saveMember({ id: me.id, naam: me.naam, lastSeen: Date.now() });
     this.broadcastPresence();
+    if (!this.online().some((o) => o.id === me.id)) this.snowball.gone(me.id);
   }
 
   /** who is connected right now (for the admin panel) */

@@ -1,5 +1,6 @@
 // Messages between the browser (src/live.ts) and a trip's room (server/room.ts), as JSON over a WebSocket.
 // Who you are is not part of the messages: the server checks your session and tells the room.
+import type { GameAction, GameEvent, GameState } from './snowball.ts';
 
 /** what someone is looking at right now */
 export interface Viewing {
@@ -24,6 +25,7 @@ export interface OnlineMember {
 
 export interface ChatMessage {
   id: number;
+  /** SYSTEM for lines from Pistenpuls itself (e.g. who won a game) */
   from: string;
   naam: string;
   text: string;
@@ -33,13 +35,23 @@ export interface ChatMessage {
 export type ClientMsg =
   | { t: 'hello'; viewing: Viewing }
   | { t: 'view'; viewing: Viewing }
-  | { t: 'msg'; text: string };
+  | { t: 'msg'; text: string }
+  | { t: 'challenge'; to: string }
+  | { t: 'answer'; game: string; accept: boolean }
+  | { t: 'play'; game: string; a: GameAction }
+  /** give up, or withdraw a challenge */
+  | { t: 'quit'; game: string };
 
 export type ServerMsg =
   | { t: 'state'; me: string; online: OnlineMember[]; members: Member[]; messages: ChatMessage[] }
   | { t: 'presence'; online: OnlineMember[]; members: Member[] }
   | { t: 'msg'; msg: ChatMessage }
+  /** only to the two players */
+  | { t: 'game'; game: GameState; ev?: GameEvent }
   | { t: 'error'; error: string };
+
+/** author of system lines in the chat */
+export const SYSTEM = '@';
 
 /** room names: lowercase letters, digits and dashes */
 export const GROUP_RE = /^[a-z0-9-]{6,40}$/;

@@ -1,5 +1,6 @@
 // Connection to one trip's room: who is online, who was here, messages. Reconnects by itself.
 // You are who your session says (the server checks it); the browser sends no identity.
+import type { GameAction, GameEvent, GameState } from '../shared/snowball';
 import { type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live';
 
 export type LiveStatus = 'connecting' | 'online' | 'offline';
@@ -17,12 +18,19 @@ export type LiveEvent =
   | { t: 'status' }
   | { t: 'state' }
   | { t: 'presence'; joined: OnlineMember[] }
-  | { t: 'msg'; msg: ChatMessage };
+  | { t: 'msg'; msg: ChatMessage }
+  | { t: 'game'; game: GameState; ev?: GameEvent }
+  | { t: 'error'; error: string };
 
 export interface Live {
   trip: string;
   state: LiveState;
   say(text: string): void;
+  /** snowball fight */
+  challenge(to: string): void;
+  answer(game: string, accept: boolean): void;
+  play(game: string, a: GameAction): void;
+  quit(game: string): void;
   /** what's on screen now; this connection's trip counts as 'visible' only when it's that one */
   setActive(trip: string | null): void;
   close(): void;
@@ -64,7 +72,8 @@ export function connectLive(opts: { apiBase: string; trip: string; active: strin
         state.messages.push(m.msg);
         if (state.messages.length > 200) state.messages.shift();
         opts.onEvent({ t: 'msg', msg: m.msg });
-      } else if (m.t === 'error') console.warn('live', m.error);
+      } else if (m.t === 'game') opts.onEvent({ t: 'game', game: m.game, ev: m.ev });
+      else if (m.t === 'error') opts.onEvent({ t: 'error', error: m.error });
     };
     sock.onclose = () => {
       clearInterval(pingT);
@@ -86,6 +95,10 @@ export function connectLive(opts: { apiBase: string; trip: string; active: strin
     trip: opts.trip,
     state,
     say: (text) => send({ t: 'msg', text }),
+    challenge: (to) => send({ t: 'challenge', to }),
+    answer: (game, accept) => send({ t: 'answer', game, accept }),
+    play: (game, a) => send({ t: 'play', game, a }),
+    quit: (game) => send({ t: 'quit', game }),
     setActive: (t) => { active = t; send({ t: 'view', viewing: viewing() }); },
     close: () => { closed = true; clearTimeout(retryT); clearInterval(pingT); document.removeEventListener('visibilitychange', onVis); ws?.close(); },
   };

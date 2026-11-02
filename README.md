@@ -62,6 +62,16 @@ Wie je bent bepaalt de server (sessie + lidmaatschap worden gecontroleerd voorda
 - Cloudflare: één Durable Object per reis, met eigen SQLite (`server/cloudflare.ts`)
 - Node: `ws` + hetzelfde SQLite-bestand in `data/` (`server/node.ts`, Node 22.13 of nieuwer)
 
+### Sneeuwbalgevecht
+
+In de chat staat een sneeuwbal achter de naam van wie online is: daarmee daag je iemand uit. Die krijgt een melding (ja/nee, 30 seconden).
+Twee knoppen: **Gooien** en **Bukken** (of spatie / pijl omlaag). Wie het eerst 3 keer raakt wint, na een minuut telt de stand.
+Uitdaging, antwoord en uitslag komen als regel in de chat.
+
+- `shared/snowball.ts`: regels en timing (vliegtijd, herladen, bukken)
+- `server/snowball.ts`: de scheidsrechter, draait in de kamer van de reis (beslist wat raak is)
+- `src/snowball.ts`: uitnodiging, spelscherm, uitslag
+
 ## Een skigebied toevoegen
 
 ```sh
