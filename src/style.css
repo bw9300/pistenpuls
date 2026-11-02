@@ -340,8 +340,9 @@ body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:h
 .sbic{width:20px;height:20px;flex:none}
 .sbic.big{width:64px;height:64px}
 .sbch{display:inline-grid;place-items:center;width:30px;height:30px;margin-left:6px;padding:0;vertical-align:middle;background:#1C3042;border:1px solid var(--line);border-radius:50%;cursor:pointer;transition:transform .15s,background .15s}
-.sbch:hover,.sbch:focus-visible{background:#2B4A66;transform:scale(1.12) rotate(-12deg)}
-.people li .sbch{margin-left:auto}
+.menu .sbch{flex:none;padding:0;border-radius:50%;background:#1C3042}
+.menu .sbch:hover,.menu .sbch:focus-visible{background:#2B4A66;transform:scale(1.12) rotate(-12deg)}
+.people li .sbch{margin-left:2px}
 .msgs .m b .sbch{width:24px;height:24px;margin-left:6px}.msgs .m b .sbch .sbic{width:16px;height:16px}
 .msgs .sys{align-self:center;max-width:92%;text-align:center;padding:4px 12px;border-radius:12px;background:rgba(91,155,213,.14);color:var(--muted)}
 .msgs .sys p{margin:0;font-size:14px;line-height:1.35}.msgs .sys time{font-size:11px;color:var(--quiet)}
