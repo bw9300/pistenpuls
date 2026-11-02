@@ -77,9 +77,9 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
     who.hidden = false;
     who.title = list.map((o) => o.naam + (o.viewing.trip ? ` · ${tripName(o.viewing.trip)}` : '')).join('\n')
       + (rec.length ? `\n\nLaatste uur: ${rec.map((m) => m.naam).join(', ')}` : '');
-    who.innerHTML = `<span class="avs">${list.slice(0, 5).map((o) => avatar(o.id, o.naam, !o.viewing.visible)).join('')}</span>`
-      + (list.length > 5 ? `<em>+${list.length - 5}</em>` : '')
-      + `<span>${others.length ? `${others.length + 1} kijken mee` : 'alleen jij'}</span>`;
+    who.innerHTML = `<span class="avs">${list.slice(0, 3).map((o) => avatar(o.id, o.naam, !o.viewing.visible)).join('')}</span>`
+      + (list.length > 3 ? `<em>+${list.length - 3}</em>` : '')
+      + `<span class="wlbl">${others.length ? `${others.length + 1} kijken mee` : 'alleen jij'}</span>`;
   }
 
   function renderBadge() {

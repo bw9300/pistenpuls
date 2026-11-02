@@ -31,7 +31,6 @@ body{background:var(--night);color:var(--snow);font-family:var(--body);overflow:
 .mob .topbar{top:14px;left:16px;right:16px;height:auto;flex-wrap:wrap;row-gap:10px}
 .mob .brand{padding:8px 14px 8px 10px;gap:10px}.mob .brand svg{width:30px;height:30px}.mob .brand b{font-size:24px}
 .mob .clock{padding:6px 12px}.mob .clock .num{font-size:30px}.mob .clock div:last-child{font-size:12px}
-.mob .tabs{order:3;width:100%;justify-content:center}.mob .tabs div{font-size:15px;padding:7px 14px}
 .mob .scene{display:flex;flex-direction:column;justify-content:flex-end;gap:12px;padding:0 16px 84px}
 .mob .scene .count,.mob .scene .col,.mob .scene .camgrid,.mob .scene .camcol,.mob .scene .legend,.mob .scene .groet{position:static;width:auto;max-width:none}
 .mob .scene .tile,.mob .scene .free{flex:none}
@@ -70,8 +69,11 @@ body{background:var(--night);color:var(--snow);font-family:var(--body);overflow:
 .compact .bottom{bottom:16px;right:90px}
 
 .safeprobe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
-.tabs div{padding:10px 24px;border-radius:999px;font-size:20px;color:var(--muted);transition:background .6s,color .6s}
-.tabs div.on{background:var(--snow);color:var(--night);font-weight:700}
+.tabs{pointer-events:auto}
+.tabs button{display:flex;align-items:center;padding:10px 24px;border:0;border-radius:999px;background:none;font:500 20px var(--body);color:var(--muted);cursor:pointer;white-space:nowrap;transition:background .6s,color .6s}
+.tabs button:hover{color:var(--snow)}
+.tabs button:focus-visible{outline:2px solid var(--lantaarn);outline-offset:2px}
+.tabs button.on{background:var(--snow);color:var(--night);font-weight:700}
 .clock{text-align:right;padding:8px 18px;border-radius:14px}
 .clock .num{font-size:44px}
 .clock div:last-child{font-size:18px;color:var(--muted)}
@@ -200,8 +202,11 @@ body.wizard #sky{background:linear-gradient(180deg,#3B6C9E 0%,#C3D6E6 70%,#E9EFF
 .wiz button:focus-visible{outline:2px solid var(--lantaarn);outline-offset:2px}
 @media (max-width:420px){.wizcard{padding:22px}.wizcard h1{font-size:34px}.wdate{flex-direction:column;align-items:stretch}}
 .msrc{margin:0;font-size:12px;color:var(--quiet);line-height:1.4}
-.tabs .pinic{display:none;margin-left:8px;vertical-align:-2px}
-.tabs.pinned div.on .pinic{display:inline-block}
+/* pin on the current trip: faint = click to hold, solid = held */
+.tabs .pinic{display:none;flex:none;margin-left:8px}
+.tabs button.on .pinic{display:block;opacity:.3;transition:opacity .3s}
+.tabs button.on:hover .pinic{opacity:.6}
+.tabs.pinned button.on .pinic{opacity:1}
 @media (prefers-reduced-motion: reduce){.scene,.scene .tile,.scene .free{transition-duration:.01s}}
 /* ===== live: who's watching, the group panel, toasts ===== */
 .topright{display:flex;align-items:center;gap:14px}
@@ -257,7 +262,12 @@ body.wizard .toasts,body.wizard .chat{display:none}
 .mob .brand{order:1;min-width:0}
 .mob .clock{order:2;margin-left:auto}
 .mob .who{order:3}
-.mob .tabs{order:4;flex:1 1 auto;width:auto}
+.mob .tabs{order:4;flex:1 1 0;min-width:0;justify-content:flex-end;padding:4px;gap:4px}
+.mob .tabs button{display:block;flex:0 1 auto;min-width:0;padding:7px 12px;font-size:15px;overflow:hidden;text-overflow:ellipsis}
+.mob .tabs button.on .pinic{display:inline-block;vertical-align:-2px}
+.mob .tabs .tnum,.mob .who .wlbl{display:none}
+.mob .tabs .pinic{margin-left:5px;width:13px;height:13px}
+.mob .who{flex:none}
 /* explore the map yourself (controls.ts) */
 #gl{cursor:grab}
 #gl.grabbing{cursor:grabbing}

@@ -142,10 +142,6 @@
     <button role="tab" id="tabSet" aria-selected="false" aria-controls="panSet" tabindex="-1">Instellingen</button>
   </div>
   <div class="mpanel" id="panCtl" role="tabpanel" aria-labelledby="tabCtl">
-  <section id="secTrip"><h4>Reis</h4>
-    <div class="grp" id="mTrips"></div>
-    <label class="sw" for="pin"><input type="checkbox" id="pin"><span class="knob" aria-hidden="true"></span><span>Huidige reis vasthouden</span></label>
-  </section>
   <section><h4>Scène</h4>
     <div class="grp"><button id="bPrev">Vorige</button><button id="bPause" aria-pressed="false">Pauzeer</button><button id="bNext">Volgende</button></div>
   </section>
@@ -168,6 +164,11 @@
   <p class="msrc" id="mapInfo"></p>
 </div>
 
+<script>
+// right after a deploy a fresh file can briefly 404 at the edge: reload once instead of hanging on 'Bergen laden'
+function ppRetry(){try{if(sessionStorage.getItem('pp-retry'))return;sessionStorage.setItem('pp-retry','1')}catch(e){return}setTimeout(function(){location.reload()},1500)}
+addEventListener('error',function(e){var t=e.target,u=t&&(t.src||t.href)||'';if(u.indexOf(location.origin+'/assets/')===0)ppRetry()},true);
+</script>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

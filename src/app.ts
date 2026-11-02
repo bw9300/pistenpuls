@@ -211,8 +211,7 @@ const fmtDay=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',mont
 const fmtDate=new Intl.DateTimeFormat('nl-NL',{weekday:'long',day:'numeric',month:'long'});
 const D=iso=>new Date(iso+'T00:00:00');
 const nl=n=>Math.round(n).toLocaleString('nl-NL');
-$('tabs').innerHTML=TRIPS.map((t,i)=>`<div>${i+1} · ${t.kort}<svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-label="vastgehouden"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>`).join('');
-$('mTrips').innerHTML=TRIPS.map((t,i)=>`<button data-trip="${i}" aria-pressed="false">${t.kort}</button>`).join('');
+$('tabs').innerHTML=TRIPS.map((t,i)=>`<button type="button" data-trip="${i}" aria-pressed="false"><span class="tnum">${i+1} · </span>${esc(t.kort)}<svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`).join('');
 $('segs').innerHTML=SCENES.map((s,i)=>`<button type="button" class="seg" data-seg="${i}" aria-label="Ga naar ${s}"><div>${s}</div><div class="tr"><i></i></div></button>`).join('');
 const segEls=[...document.querySelectorAll('.seg')],sceneEls=[...document.querySelectorAll('.scene')],tabEls=[...$('tabs').children];
 const greetWord=()=>{const h=new Date().getHours();return h<6?'Goedenacht':h<12?'Goedemorgen':h<18?'Goedemiddag':'Goedenavond'};
@@ -232,7 +231,7 @@ function fillTrip(T){
   const wk=Math.floor(dt/7);$('weeks').textContent=dt<=0?'Nu!':wk>1?wk+' weken':dt+(dt===1?' dag':' dagen');
   $('mkName').textContent=`${w.summitName||'Bergstation'} · ${nl(w.topAlt)} m`;
   $('topCount').innerHTML=(NAAM?`${greetWord()}, ${esc(NAAM)} · `:'')+(dt>0?`nog <strong>${dt} ${dt===1?'dag':'dagen'}</strong>`:'<strong>vandaag!</strong>');
-  tabEls.forEach((e,i)=>e.classList.toggle('on',TRIPS[i]===T));
+  tabEls.forEach((e,i)=>e.classList.toggle('on',TRIPS[i]===T));tabTitles();
   document.querySelectorAll('[data-trip]').forEach(b=>b.setAttribute('aria-pressed',TRIPS[+b.dataset.trip]===T));
   const s=w.summit,v=w.village;
   camCams[0].position.set(s[0],s[1]+25,s[2]);camCams[0].lookAt(v[0],v[1],v[2]);
@@ -297,7 +296,9 @@ function sceneFocus(w,i){const s=w.summit,v=w.village,c=i<0?SCENE_CAM[0]:SCENE_C
 let trip=0,sc=-2,scT=0,paused=false,flight=null,shown=null;
 // "Huidige reis vasthouden": remembered in this browser
 let pinned=false;try{const v=localStorage.getItem('pp-pin'),i=TRIPS.findIndex(t=>t.id===v);if(i>=0&&TRIPS.length>1){pinned=true;trip=i}}catch(e){}
-function savePin(i=trip){try{pinned?localStorage.setItem('pp-pin',TRIPS[i].id):localStorage.removeItem('pp-pin')}catch(e){}$('tabs').classList.toggle('pinned',pinned);$('pin').checked=pinned}
+function savePin(i=trip){try{pinned?localStorage.setItem('pp-pin',TRIPS[i].id):localStorage.removeItem('pp-pin')}catch(e){}$('tabs').classList.toggle('pinned',pinned);tabTitles()}
+// trip pills: click another trip to fly there, click the current one to hold it (or let go)
+function tabTitles(){tabEls.forEach((e,i)=>e.title=i!==trip?`Naar ${TRIPS[i].naam}`:pinned?'Vastgehouden. Klik om weer langs alle reizen te gaan.':'Klik om deze reis vast te houden')}
 function showScene(i){controls.returnNow();sceneEls.forEach(e=>e.classList.toggle('on',+e.dataset.s===i));
   segEls.forEach((e,k)=>{e.classList.toggle('on',k===i);e.classList.toggle('done',i>=0&&k<i);if(k>=i)e.querySelector('i').style.width='0'});
   const T=TRIPS[trip];if(i>=0&&T.world){const c=SCENE_CAM[i];orbitGoal.r=c.r*T.world.R*camZoom();orbitGoal.h=c.h*T.world.R*camZoom();focusGoal=sceneFocus(T.world,i)}}
@@ -313,10 +314,9 @@ function next(){if(sc<0)return;if(sc<SCENES.length-1){sc++;scT=0;showScene(sc)}e
 function prev(){if(sc<=0)return;sc--;scT=0;showScene(sc)}
 $('bNext').onclick=next;$('bPrev').onclick=prev;
 document.querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(sc<0||flight)return;sc=+b.dataset.seg;scT=0;showScene(sc)});
-document.querySelectorAll('[data-trip]').forEach(b=>b.onclick=()=>{const i=+b.dataset.trip;if(i!==trip&&sc>=0)goTrip(i)});
-$('pin').onchange=e=>{pinned=e.target.checked;savePin()};
+document.querySelectorAll('[data-trip]').forEach(b=>b.onclick=()=>{const i=+b.dataset.trip;if(flight||sc<0)return;if(i===trip){pinned=!pinned;savePin()}else goTrip(i)});
 savePin();
-const multi=TRIPS.length>1;$('tabs').hidden=!multi;$('secTrip').hidden=!multi;
+const multi=TRIPS.length>1;$('tabs').hidden=!multi;
 $('bPause').onclick=e=>{paused=!paused;e.currentTarget.setAttribute('aria-pressed',paused);e.currentTarget.textContent=paused?'Hervat':'Pauzeer'};
 document.querySelectorAll('[data-wx]').forEach(b=>b.onclick=()=>{wxMode=b.dataset.wx;document.querySelectorAll('[data-wx]').forEach(x=>x.setAttribute('aria-pressed',x===b));applyTod()});
 document.querySelectorAll('[data-tod]').forEach(b=>b.onclick=()=>{todMode=b.dataset.tod;document.querySelectorAll('[data-tod]').forEach(x=>x.setAttribute('aria-pressed',x===b));applyTod()});
