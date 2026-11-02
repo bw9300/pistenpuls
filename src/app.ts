@@ -394,8 +394,12 @@ addEventListener('resize',fit);document.addEventListener('visibilitychange',fit)
 addEventListener('resize',queueTopbar);document.fonts&&document.fonts.ready.then(queueTopbar);queueTopbar();
 
 // ---------- après-ski pins (scene 'Sfeer nu'); the scene waits while one is open ----------
-let apresOpen=false,apresMode=false;
-const apres=createApres($('apres'),o=>{apresOpen=o});
+let apresOpen=false,apresMode=false,camFastUntil=0;
+// tap a place: the camera flies in close; close it: back to the overview of 'Sfeer nu'
+const apres=createApres($('apres'),p=>{apresOpen=!!p;document.body.classList.toggle('apcardopen',!!p);const w=TRIPS[trip].world;if(!w)return;
+  controls.returnNow();camFastUntil=time+3.5;
+  if(p){focusGoal=new THREE.Vector3(p.x,p.y,p.z);orbitGoal.r=w.R*.1*camZoom();orbitGoal.h=w.R*.05*camZoom()}
+  else if(sc===4){const c=SCENE_CAM[4];orbitGoal.r=c.r*w.R*camZoom();orbitGoal.h=c.h*w.R*camZoom();focusGoal=sceneFocus(w,4)}});
 /** 'Bekijk op de kaart': the info of 'Sfeer nu' slides away so the whole map is free for the pins; the scene waits */
 function setApresMode(on){apresMode=on;document.body.classList.toggle('apresmode',on);$('apresBack').hidden=!on;if(on)$('apresBack').focus()}
 $('apresBtn').onclick=()=>setApresMode(true);
@@ -444,7 +448,7 @@ function frame(now){
   } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()&&!drive&&!apresOpen&&!apresMode){scT+=dt;if(scT>=SCENE_DUR)next()}
   if(sc>=0)segEls[sc].querySelector('i').style.width=(scenePin!==null?100:Math.min(100,scT/SCENE_DUR*100))+'%';
   const T=shown;if(!T||!T.world){return}
-  const w=T.world,k=1-Math.exp(-dt*.6);
+  const w=T.world,k=1-Math.exp(-dt*(time<camFastUntil?1.8:.6));
   orbit.r+=(orbitGoal.r-orbit.r)*k;orbit.h+=(orbitGoal.h-orbit.h)*k;target.lerp(focusGoal,k);
   if(flight&&!flight.swapped)orbit.h+=w.R*.5*dt;
   ang+=dt*(reduce?.006:.035);

@@ -11,7 +11,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { PNG } from 'pngjs';
 import { CONFIG, type Area } from '../src/config.ts';
-import { PI, tileRange, makeDem, parseOsm, pisteClass } from '../src/terrain.ts';
+import { PI, tileRange, makeDem, parseOsm, pisteClass, demFromGrid, decodeLine } from '../src/terrain.ts';
 
 const { values: a } = parseArgs({
   options: { id: { type: 'string' }, naam: { type: 'string' }, kort: { type: 'string' }, regio: { type: 'string' }, van: { type: 'string' }, bbox: { type: 'string' }, apres: { type: 'boolean' } },
@@ -37,7 +37,7 @@ const mapFile = path.join(dir, 'map.json');
 if (a.apres) {
   if (!fs.existsSync(mapFile)) fail('Nog geen map.json: maak eerst het gebied aan (zonder --apres)');
   const old = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
-  old.apres = await fetchApres(area.bbox);
+  old.apres = await fetchApres(area.bbox, demFromGrid(area.bbox, old.dem, atob), [...old.pistes.map((p: any) => decodeLine(p[1])), ...old.lifts.map((l: any) => decodeLine(l[2]))]);
   fs.writeFileSync(mapFile, JSON.stringify(old));
   console.log(`✓ ${mapFile}: ${old.apres.length} après-skiplekken`);
   process.exit(0);
@@ -96,28 +96,46 @@ async function buildMap(bbox: Area['bbox']) {
     pistes: ski.pistes.map((p: any) => [pisteClass(p.diff), enc(p.g)]),
     lifts: ski.lifts.map((l: any) => [l.type, l.name, enc(l.g)]),
     houses,
-    apres: await fetchApres(bbox),
+    apres: await fetchApres(bbox, elev, [...ski.pistes.map((p: any) => p.g), ...ski.lifts.map((l: any) => l.g)]),
   };
 }
 
-/** bars, pubs, clubs, beer gardens, and huts (restaurants/cafés called …hütte, …alm, …stadl) with a name:
- *  [kind, name, lon×1e5, lat×1e5, opening hours, website] */
-async function fetchApres(bbox: Area['bbox']) {
+/** the places for après-ski, as [kind, name, lon×1e5, lat×1e5, opening hours, website]:
+ *  every bar, pub, club and beer garden with a name, and the restaurants and cafés that are on the mountain
+ *  (well above the valley, or next to a piste or lift) or called …hütte/…alm/…stadl */
+async function fetchApres(bbox: Area['bbox'], elev: (lon: number, lat: number) => number, lines: number[][][]) {
   const [w, s, e, n] = bbox, bb = `${s},${w},${n},${e}`;
+  const lat0 = (s + n) / 2, kx = 111320 * Math.cos((lat0 * PI) / 180), kz = 110574;
   console.log('Après-ski uit OpenStreetMap…');
-  const hut = 'hütte|huette|hütt|alm|stadl|stall|stub|schirm|iglu|apres|après|alpe';
-  const j = await overpass(`[out:json][timeout:90];(
-    nwr["amenity"~"^(bar|pub|nightclub|biergarten)$"]["name"](${bb});
-    nwr["amenity"~"^(restaurant|cafe)$"]["name"~"${hut}",i](${bb});
+  const j = await overpass(`[out:json][timeout:120];(
+    nwr["amenity"~"^(bar|pub|nightclub|biergarten|restaurant|cafe)$"]["name"](${bb});
     nwr["apres_ski"="yes"]["name"](${bb});
     nwr["tourism"="alpine_hut"]["name"](${bb});
   );out center tags;`);
+
+  // 'the valley': the lowest fifth of the map; 'on the mountain' is 150 m above that
+  const hs: number[] = [];
+  for (let i = 0; i <= 40; i++) for (let k = 0; k <= 40; k++) hs.push(elev(w + ((e - w) * i) / 40, s + ((n - s) * k) / 40));
+  hs.sort((x, y) => x - y);
+  const valley = hs[Math.floor(hs.length * 0.2)];
+  // close to a piste or lift (within 150 m)
+  const segs = lines.flatMap((l) => l.slice(1).map((p, i) => [l[i], p]));
+  const nearSlope = (lon: number, lat: number) => segs.some(([a, b]) => {
+    const ax = (a[0] - lon) * kx, az = (a[1] - lat) * kz, bx = (b[0] - lon) * kx, bz = (b[1] - lat) * kz;
+    const dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, -(ax * dx + az * dz) / L));
+    return Math.hypot(ax + dx * t, az + dz * t) < 150;
+  });
+  const hutName = /hütte|huette|hütt|alm|stadl|stall|stub|schirm|iglu|apres|après|alpe|berg|gipfel|panorama/i;
+
   const kind = (t: any) => (t.amenity === 'nightclub' ? 'club' : t.amenity === 'pub' ? 'pub' : t.amenity === 'biergarten' ? 'biergarten'
     : t.amenity === 'bar' || t.apres_ski === 'yes' ? 'bar' : 'hut');
   const seen = new Set<string>(), out: (string | number)[][] = [];
   for (const el of j.elements || []) {
     const t = el.tags || {}, lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
     if (!t.name || lat == null || lon < w || lon > e || lat < s || lat > n) continue;
+    if (t.amenity === 'restaurant' || t.amenity === 'cafe') {
+      if (!(hutName.test(t.name) || elev(lon, lat) > valley + 150 || nearSlope(lon, lat))) continue; // a pizzeria in the village
+    }
     const key = t.name.toLowerCase() + Math.round(lat * 500) + Math.round(lon * 500); // the same place as a node and a building
     if (seen.has(key)) continue;
     seen.add(key);

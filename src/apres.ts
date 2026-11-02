@@ -21,7 +21,8 @@ const icon = (k: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[
 const DAYS: Record<string, string> = { Mo: 'ma', Tu: 'di', We: 'wo', Th: 'do', Fr: 'vr', Sa: 'za', Su: 'zo', PH: 'feestdagen' };
 const hoursNl = (h: string) => h.replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, (d) => DAYS[d]).replace(/\boff\b/g, 'dicht').replace(/(\d)-(\d)/g, '$1–$2').replace(/([a-z])-([a-z])/g, '$1–$2').replace(/;\s*/g, ' · ');
 
-export function createApres(layer: HTMLElement, onOpen: (open: boolean) => void) {
+/** onOpen: a place was opened (fly there) or closed (null: back to the overview) */
+export function createApres(layer: HTMLElement, onOpen: (place: { x: number; y: number; z: number } | null) => void) {
   let places: Place[] = [], sel: Place | null = null, shown = false, n = 0;
   const card = document.createElement('div');
   card.className = 'apcard tile';
@@ -53,21 +54,24 @@ export function createApres(layer: HTMLElement, onOpen: (open: boolean) => void)
     sel = p;
     const osm = `https://www.openstreetmap.org/?mlat=${p.lat.toFixed(5)}&mlon=${p.lon.toFixed(5)}#map=18/${p.lat.toFixed(5)}/${p.lon.toFixed(5)}`;
     const web = /^https?:\/\//i.test(p.web) ? p.web : p.web ? 'https://' + p.web : '';
+    // OpenStreetMap often has no (or old) opening hours: Google Maps, searched around the spot, usually does
+    const gmaps = `https://www.google.com/maps/search/${encodeURIComponent(p.naam)}/@${p.lat.toFixed(5)},${p.lon.toFixed(5)},16z`;
     card.innerHTML = `<button type="button" class="apx" aria-label="Sluiten">✕</button>
       <div class="aphead">${icon(p.kind)}<div><b>${esc(p.naam)}</b><small>${KIND[p.kind] || 'Après-ski'}</small></div></div>
-      ${p.hours ? `<p><span class="lbl">Open</span>${esc(hoursNl(p.hours))}</p>` : '<p class="quiet">Openingstijden onbekend</p>'}
-      <p class="aplinks">${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Website</a>` : ''}<a href="${osm}" target="_blank" rel="noopener">Op de kaart</a></p>`;
+      ${p.hours ? `<p><span class="lbl">Open volgens OpenStreetMap</span>${esc(hoursNl(p.hours))}</p>` : '<p class="quiet">Openingstijden staan niet in OpenStreetMap.</p>'}
+      <a class="apgm" href="${gmaps}" target="_blank" rel="noopener">Openingstijden en foto's op Google Maps</a>
+      <p class="aplinks">${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Website</a>` : ''}<a href="${osm}" target="_blank" rel="noopener">OpenStreetMap</a></p>`;
     card.querySelector<HTMLButtonElement>('.apx')!.onclick = close;
     card.hidden = false;
     for (const q of places) q.el.classList.toggle('on', q === p);
-    onOpen(true);
+    onOpen(p);
   }
   function close() {
     if (!sel) return;
     sel = null;
     card.hidden = true;
     for (const q of places) q.el.classList.remove('on');
-    onOpen(false);
+    onOpen(null);
   }
   addEventListener('pointerdown', (e) => { if (sel && !card.contains(e.target as Node) && !(e.target as Element).closest?.('.ap')) close(); });
   addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
