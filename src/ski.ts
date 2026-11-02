@@ -5,7 +5,7 @@ import type { GameEvent, GameState, PisteRef } from '../shared/games';
 import { MIN_TAP_MS, SKI_TAPS } from '../shared/ski';
 import type { Live } from './live';
 import { esc } from './settings';
-import { COLORS, fmt, lockEnd } from './snowball';
+import { COLORS, fmt, loadingLayer, loadingState, lockEnd } from './snowball';
 import { avatarImage } from './avatars';
 
 /** what the race needs from the dashboard's 3D scene (app.ts) */
@@ -153,7 +153,8 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
       <div class="skrow them"><b>${esc(them.naam)}</b><span class="skbar"><i data-bar="${them.id}"></i></span></div>
       <div class="skclock" data-clock></div>
     </div>
-    <div class="sksay" data-say>Kaart laden…</div>
+    <div class="sksay" data-say></div>
+    ${loadingLayer(SKIER, 'Skiwedstrijd laden', 'Kaart, piste en skiërs klaarzetten…')}
     <div class="skbottom">
       <p class="sbhelp">Tik zo snel je kunt op de knop. Hoe sneller je tikt, hoe sneller je skiet!</p>
       <button type="button" class="sktap" data-tap>${SKIER}<span>Tik snel!</span><small>of de spatiebalk</small></button>
@@ -161,6 +162,7 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
     </div>`;
   const q = <T extends HTMLElement = HTMLElement>(s: string) => b.querySelector(s) as T;
   const say = q('[data-say]'), clock = q('[data-clock]'), tapBtn = q<HTMLButtonElement>('[data-tap]');
+  const loading = loadingState(b, () => live.play(g.id, 'ready'), them.naam);
   let g = first, endAt = 0, over = false, sayT = 0, stopped = false;
   let myTaps = 0, lastTap = 0;
   const disp: Record<string, number> = { [me]: 0, [them.id]: 0 };
@@ -193,17 +195,19 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
   // ---------- the 3D part ----------
   let path: ReturnType<typeof pathOf> = null, world: World | null = null;
   const group = new THREE.Group();
-  const skiers = { [me]: skier('Jij', self.naam, COLORS.me, '#E0533D'), [them.id]: skier(them.naam, them.naam, COLORS.them, '#5B9BD5', 2.7) } // name tags at different heights: side by side they'd overlap;
-  for (const id of [me, them.id]) avatarImage(id).then((img) => skiers[id].face(img));
+  // name tags at different heights: side by side they'd overlap
+  const skiers = { [me]: skier('Jij', self.naam, COLORS.me, '#E0533D'), [them.id]: skier(them.naam, them.naam, COLORS.them, '#5B9BD5', 2.7) };
+  const faces = Promise.all([me, them.id].map((id) => avatarImage(id).then((img) => skiers[id].face(img))));
   const camPos = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
   let t = 0, camReady = false;
 
-  stage.show(live.trip).then((w) => {
+  // everything ready (map, piste, faces)? then tell the room; the countdown starts when both are
+  Promise.all([stage.show(live.trip), faces]).then(([w]) => {
     if (stopped) return;
     world = w;
     path = w && g.piste ? pathOf(w, g.piste.i) : null;
+    loading.ready();
     if (!w || !path) { shout('Deze piste staat niet op jouw kaart, je ziet alleen de balken.', 'note', 0); return; }
-    if (g.status === 'countdown' || g.status === 'invited') say.className = 'sksay';
     const top = path.at(0), bottom = path.at(path.L);
     group.add(gate(w, path.at(8), '#E0533D'), gate(w, bottom, '#F0B45A'));
     for (const s of Object.values(skiers)) group.add(s.g);
@@ -286,6 +290,7 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
     update(next: GameState, _ev?: GameEvent) {
       const was = g.status;
       g = next;
+      loading.update(g);
       endAt = Date.now() + g.left;
       if (g.status === 'countdown' && was !== 'countdown') {
         const n = Math.ceil(g.left / 1000);

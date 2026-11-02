@@ -2,7 +2,7 @@
 // the browsers only press buttons. Games live in memory: they're short, and the pending timers keep
 // a Durable Object awake while one is going on.
 import type { ServerMsg } from '../shared/live.ts';
-import { COUNTDOWN_MS, GAME_WORDS, GONE_MS, INVITE_MS, type GameAction, type GameEnd, type GameEvent, type GameKind, type GameState, type PisteRef, type Player } from '../shared/games.ts';
+import { COUNTDOWN_MS, GAME_WORDS, GONE_MS, INVITE_MS, LOAD_MS, type GameAction, type GameEnd, type GameEvent, type GameKind, type GameState, type PisteRef, type Player } from '../shared/games.ts';
 import { DUCK_COOLDOWN_MS, DUCK_MS, FLIGHT_MS, GAME_MS, RELOAD_MS, WIN_HITS } from '../shared/snowball.ts';
 import { MIN_TAP_MS, SKI_MS, SKI_TAPS } from '../shared/ski.ts';
 
@@ -26,9 +26,10 @@ interface Game extends Omit<GameState, 'left'> {
   // ski
   lastTap: Record<string, number>;
   dirty: boolean;
+  ready: string[];
 }
 
-const ACTIVE = new Set(['invited', 'countdown', 'playing']);
+const ACTIVE = new Set(['invited', 'loading', 'countdown', 'playing']);
 const LENGTH: Record<GameKind, number> = { snowball: GAME_MS, ski: SKI_MS };
 const secs = (ms: number) => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
 
@@ -54,7 +55,7 @@ export class Games {
     const g: Game = {
       id: Date.now().toString(36) + (this.n++).toString(36), kind, a: from, b: { id: to, naam }, status: 'invited',
       score: { [from.id]: 0, [to]: 0 }, piste: kind === 'ski' ? piste : undefined, until: Date.now() + INVITE_MS, started: 0,
-      timers: new Set(), reloadAt: {}, duckUntil: {}, duckAt: {}, lastTap: {}, dirty: false,
+      timers: new Set(), reloadAt: {}, duckUntil: {}, duckAt: {}, lastTap: {}, dirty: false, ready: [],
     };
     this.games.set(g.id, g);
     this.later(g, INVITE_MS, () => g.status === 'invited' && this.finish(g, null, 'expired'));
@@ -68,9 +69,25 @@ export class Games {
     const g = this.games.get(id);
     if (!g || g.status !== 'invited' || g.b.id !== userId) return;
     if (!accept) return this.finish(g, null, 'declined');
+    g.status = 'loading';
+    g.until = Date.now() + LOAD_MS;
+    this.host.system(`${GAME_WORDS[g.kind].icon} ${g.b.naam} neemt de uitdaging van ${g.a.naam} aan. ${g.kind === 'ski' ? 'Daar gaan ze!' : 'Gooien maar!'}`);
+    this.send(g);
+    // someone's browser is slow: start anyway
+    this.later(g, LOAD_MS, () => g.status === 'loading' && this.countdown(g));
+  }
+
+  /** a browser has everything it needs (map, photos) */
+  private ready(g: Game, userId: string) {
+    if (g.status !== 'loading' || g.ready.includes(userId)) return;
+    g.ready.push(userId);
+    if (g.ready.length === 2) this.countdown(g);
+    else this.send(g);
+  }
+
+  private countdown(g: Game) {
     g.status = 'countdown';
     g.until = Date.now() + COUNTDOWN_MS;
-    this.host.system(`${GAME_WORDS[g.kind].icon} ${g.b.naam} neemt de uitdaging van ${g.a.naam} aan. ${g.kind === 'ski' ? 'Daar gaan ze!' : 'Gooien maar!'}`);
     this.send(g);
     this.later(g, COUNTDOWN_MS, () => {
       g.status = 'playing';
@@ -87,7 +104,9 @@ export class Games {
 
   play(userId: string, id: string, a: GameAction) {
     const g = this.games.get(id);
-    if (!g || g.status !== 'playing' || (g.a.id !== userId && g.b.id !== userId)) return;
+    if (!g || (g.a.id !== userId && g.b.id !== userId)) return;
+    if (a === 'ready') return this.ready(g, userId);
+    if (g.status !== 'playing') return;
     if (g.kind === 'ski') { if (a === 'push') this.push(g, userId); return; }
     const now = Date.now(), other = g.a.id === userId ? g.b.id : g.a.id;
     if (a === 'duck') {
@@ -191,8 +210,8 @@ export class Games {
   }
 
   private view(g: Game): GameState {
-    const { id, kind, a, b, status, score, piste, winner, end, time } = g;
-    return { id, kind, a, b, status, score, piste, winner, end, time, left: Math.max(0, g.until - Date.now()) };
+    const { id, kind, a, b, status, score, piste, winner, end, time, ready } = g;
+    return { id, kind, a, b, status, score, piste, winner, end, time, ready, left: Math.max(0, g.until - Date.now()) };
   }
 
   private send(g: Game, ev?: GameEvent) {

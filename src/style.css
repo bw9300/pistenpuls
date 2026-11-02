@@ -486,3 +486,10 @@ body.racing #stage,body.racing .menubtn,body.racing .toasts,body.racing #marker{
 .aface img{width:100%;height:100%;object-fit:cover}
 .aitem .aout{grid-column:1/-1}
 @media (max-width:560px){.aitem:has(.aface){grid-template-columns:auto 1fr}.aitem:has(.aface) .aacts{grid-column:1/-1}}
+
+/* before a game starts: loading, then waiting for the other one */
+.gload{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:rgba(15,27,38,.9);color:var(--snow);pointer-events:auto;transition:opacity .4s,visibility .4s}
+.gload h2{margin:0;font:800 30px var(--display)}
+.gload p{margin:0;font-size:18px;color:var(--muted)}
+.gload.gone{opacity:0;visibility:hidden;pointer-events:none}
+.sb.sbgame,.sb.skigame{position:fixed}

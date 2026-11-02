@@ -67,6 +67,7 @@ Wie je bent bepaalt de server (sessie + lidmaatschap worden gecontroleerd voorda
 ### Spelletjes
 
 In de chat staat een knopje achter de naam van wie online is: kies een spel en daag diegene uit. Die krijgt een melding (ja/nee, 30 seconden).
+Na 'ja' laden beide browsers het spel (kaart, foto's); het aftellen begint pas als beide klaar zijn (of na 15 s).
 Uitdaging, antwoord en uitslag komen als regel in de chat. De kamer van de reis is de scheidsrechter: die beslist wat raak is en wie er eerst beneden is.
 
 - **Sneeuwbalgevecht**: twee knoppen, **Gooien** en **Bukken** (of spatie / pijl omlaag). Wie het eerst 3 keer raakt wint.

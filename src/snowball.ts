@@ -28,6 +28,28 @@ const figure = (c: string, photo: string | null) => {
 };
 
 export const COLORS = { me: '#E0533D', them: '#5B9BD5' };
+// ---------- before a game starts: loading, then waiting for the other one ----------
+export const loadingLayer = (icon: string, title: string, text: string) =>
+  `<div class="gload" data-load>${icon.replace(/class="(\w+)"/, 'class="$1 big spin"')}<h2>${title}</h2><p data-loadtext>${text}</p></div>`;
+
+/** sends 'ready' once this browser has what it needs; hides the layer when the countdown starts */
+export function loadingState(b: HTMLElement, sendReady: () => void, other: string) {
+  let me = false;
+  const layer = b.querySelector<HTMLElement>('[data-load]')!, text = b.querySelector<HTMLElement>('[data-loadtext]')!;
+  return {
+    ready() {
+      if (me) return;
+      me = true;
+      sendReady();
+      text.textContent = `Wachten tot ${other} klaar is…`;
+    },
+    update(g: GameState) {
+      if (g.status === 'loading') { if (me && (g.ready?.length || 0) < 2) text.textContent = `Wachten tot ${other} klaar is…`; }
+      else layer.classList.add('gone');
+    },
+  };
+}
+
 /** the result stays put for a moment: whoever is still tapping or pressing space mustn't close it by accident */
 export const END_LOCK_MS = 2000;
 export function lockEnd(end: HTMLElement, ...more: HTMLButtonElement[]) {
@@ -66,8 +88,13 @@ export function snowballScreen(b: HTMLElement, live: Live, first: GameState, don
       <button type="button" class="sbduck" data-duck><span>Bukken</span><small>pijl omlaag</small></button>
       <button type="button" class="sbthrow" data-throw>${SNOWBALL}<span>Gooien</span><small>spatiebalk</small></button>
     </div>
-    <button type="button" class="sbquit" data-quit>Stoppen</button>`;
+    <button type="button" class="sbquit" data-quit>Stoppen</button>
+    ${loadingLayer(SNOWBALL, 'Sneeuwbalgevecht laden', 'Spelers klaarzetten…')}`;
   const q = <T extends HTMLElement = HTMLElement>(s: string) => b.querySelector(s) as T;
+  // ready once both photos are in (or there are none)
+  const loading = loadingState(b, () => live.play(first.id, 'ready'), them.naam);
+  Promise.all([me, them.id].map((id) => { const url = avatarUrl(id); return url ? new Promise((r) => { const i = new Image(); i.onload = i.onerror = r; i.src = url; }) : null; }))
+    .then(() => loading.ready());
   const field = q('[data-field]'), say = q('[data-say]'), clock = q('[data-clock]');
   const throwBtn = q<HTMLButtonElement>('[data-throw]'), duckBtn = q<HTMLButtonElement>('[data-duck]');
   let g = first, endAt = 0, raf = 0, sayT = 0, over = false;
@@ -198,6 +225,7 @@ export function snowballScreen(b: HTMLElement, live: Live, first: GameState, don
     update(next: GameState, ev?: GameEvent) {
       const was = g.status;
       g = next;
+      loading.update(g);
       endAt = Date.now() + g.left;
       hits();
       if (g.status === 'countdown' && was !== 'countdown') {

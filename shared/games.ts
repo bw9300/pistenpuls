@@ -12,6 +12,8 @@ export const GAME_WORDS: Record<GameKind, { de: string; een: string; icon: strin
 
 export const INVITE_MS = 30_000;
 export const COUNTDOWN_MS = 3000;
+/** after 'yes' both browsers get ready (map, photos); the countdown starts when both are, or after this long */
+export const LOAD_MS = 15_000;
 /** a player whose connection is gone this long loses */
 export const GONE_MS = 8000;
 
@@ -20,7 +22,7 @@ export interface Player { id: string; naam: string }
 /** ski: which piste (index in the area's runs, the same for everyone on this trip) and how to call it */
 export interface PisteRef { i: number; label: string }
 
-export type GameStatus = 'invited' | 'countdown' | 'playing' | 'over';
+export type GameStatus = 'invited' | 'loading' | 'countdown' | 'playing' | 'over';
 export type GameEnd = 'score' | 'finish' | 'time' | 'quit' | 'left' | 'declined' | 'expired' | 'cancelled';
 
 export interface GameState {
@@ -40,6 +42,8 @@ export interface GameState {
   end?: GameEnd;
   /** ski: the winner's time in ms */
   time?: number;
+  /** loading: who is ready to start */
+  ready?: string[];
 }
 
 export type GameEvent =
@@ -48,4 +52,4 @@ export type GameEvent =
   | { k: 'hit'; on: string }
   | { k: 'miss'; on: string };
 
-export type GameAction = 'throw' | 'duck' | 'push';
+export type GameAction = 'ready' | 'throw' | 'duck' | 'push';

@@ -79,7 +79,7 @@ export class Room {
       const error = this.games.challenge({ id: me.id, naam: me.naam }, String(m.to), kind, piste);
       if (error) this.send(conn, { t: 'error', error });
     } else if (m.t === 'answer') this.games.answer(me.id, String(m.game), !!m.accept);
-    else if (m.t === 'play') { if (m.a === 'throw' || m.a === 'duck' || m.a === 'push') this.games.play(me.id, String(m.game), m.a); }
+    else if (m.t === 'play') { if (m.a === 'ready' || m.a === 'throw' || m.a === 'duck' || m.a === 'push') this.games.play(me.id, String(m.game), m.a); }
     else if (m.t === 'quit') this.games.quit(me.id, String(m.game));
   }
 
