@@ -322,10 +322,10 @@ body.wizard .toasts,body.wizard .chat{display:none}
 body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:hidden}
 @media (max-width:560px){.arow{grid-template-columns:1fr}.aitem{grid-template-columns:1fr}.acard{padding:16px}}
 /* scene pin (click the current scene again); yellow = pinned, for scenes and trips alike */
-.seg .pinic{display:none;flex:none;width:14px;height:14px;margin-right:6px;vertical-align:-2px;opacity:.3;transition:opacity .3s,color .3s}
+.seg .pinic{display:none;flex:none;width:19px;height:19px;margin-right:7px;vertical-align:-3px;opacity:.3;transition:opacity .3s,color .3s}
 .seg.on .pinic{display:inline-block}
 .seg.on:hover .pinic{opacity:.6}
 .segs.pinned .seg.on .pinic{opacity:1;color:var(--lantaarn)}
-.mob .seg .pinic{width:11px;height:11px;margin-right:3px}
+.mob .seg .pinic{width:14px;height:14px;margin-right:4px;vertical-align:-2px}
 /* on the light pill a deeper yellow, so it stands out */
 .tabs.pinned button.on .pinic{color:#E39B2D}
