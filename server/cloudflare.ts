@@ -44,6 +44,7 @@ export default {
       const headers = new Headers(req.headers);
       headers.set('x-pp-id', user.id);
       headers.set('x-pp-naam', encodeURIComponent(user.naam));
+      headers.set('x-pp-trip', m[1]);
       return room(env, roomFor(m[1])).fetch(new Request(req, { headers }));
     }
     return app.fetch(req, env, ctx);
@@ -73,11 +74,11 @@ export class LiveRoom extends DurableObject<Env> {
   async fetch(req: Request) {
     if (new URL(req.url).pathname === '/presence') return Response.json(this.room.presence());
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket verwacht', { status: 426 });
-    const id = req.headers.get('x-pp-id'), naam = decodeURIComponent(req.headers.get('x-pp-naam') || '');
-    if (!id || !naam) return new Response('onbekende gebruiker', { status: 401 });
+    const id = req.headers.get('x-pp-id'), naam = decodeURIComponent(req.headers.get('x-pp-naam') || ''), trip = req.headers.get('x-pp-trip');
+    if (!id || !naam || !trip) return new Response('onbekende gebruiker', { status: 401 });
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ id, naam, viewing: { trip: null, visible: true }, ready: false } satisfies ConnMeta);
+    server.serializeAttachment({ id, naam, trip, viewing: { trip: null, visible: false }, ready: false } satisfies ConnMeta);
     return new Response(null, { status: 101, webSocket: client });
   }
 

@@ -60,7 +60,7 @@ server.on('upgrade', async (req, socket, head) => {
   void dir.seen(user.id);
   wss.handleUpgrade(req, socket, head, (ws) => {
     const name = roomFor(m[1]), r = getRoom(name);
-    let meta: ConnMeta | null = { id: user.id, naam: user.naam, viewing: { trip: null, visible: true }, ready: false };
+    let meta: ConnMeta | null = { id: user.id, naam: user.naam, trip: m[1], viewing: { trip: null, visible: false }, ready: false };
     const conn = { ws, send: (d: string) => ws.send(d), getMeta: () => meta, setMeta: (x: ConnMeta) => { meta = x; } };
     r.conns.add(conn);
     ws.on('message', (data) => {

@@ -107,7 +107,7 @@ export function startLiveUI(opts: {
     const onlineIds = new Set(l.state.online.map((o) => o.id));
     return l.state.members.filter((m) => !onlineIds.has(m.id) && Date.now() - m.lastSeen < RECENT_MS);
   };
-  const viewingText = (o: OnlineMember) => !o.viewing.visible ? (o.viewing.trip && o.viewing.trip !== active ? 'kijkt naar een andere reis' : 'op de achtergrond') : 'kijkt mee';
+  const viewingText = (o: OnlineMember) => (o.viewing.visible ? 'kijkt mee' : 'op de achtergrond');
 
   function renderWho() {
     const l = cur();

@@ -10,6 +10,8 @@ export interface ConnMeta {
   viewing: Viewing;
   /** said hello: gets updates and counts as online */
   ready: boolean;
+  /** the trip of this room; set by the adapter */
+  trip: string;
 }
 
 export interface Conn {
@@ -45,7 +47,7 @@ export class Room {
     if (!me) return;
 
     if (m.t === 'hello') {
-      conn.setMeta({ ...me, viewing: this.viewing(m.viewing), ready: true });
+      conn.setMeta({ ...me, viewing: this.viewing(m.viewing, me.trip), ready: true });
       this.host.storage.saveMember({ id: me.id, naam: me.naam, lastSeen: Date.now() });
       this.send(conn, { t: 'state', me: me.id, online: this.online(), members: this.host.storage.members(), messages: this.host.storage.messages(HISTORY) });
       this.broadcastPresence();
@@ -54,7 +56,7 @@ export class Room {
     if (!me.ready) return; // everything else needs a hello first
 
     if (m.t === 'view') {
-      conn.setMeta({ ...me, viewing: this.viewing(m.viewing) });
+      conn.setMeta({ ...me, viewing: this.viewing(m.viewing, me.trip) });
       this.broadcastPresence();
     } else if (m.t === 'msg') {
       const text = clean(m.text, MAX_TEXT);
@@ -78,9 +80,11 @@ export class Room {
     return this.online().map((o) => ({ id: o.id, naam: o.naam, visible: o.viewing.visible }));
   }
 
-  private viewing(v: unknown): Viewing {
+  /** only whether this trip is on someone's screen: other trips (which this room's members may not know about) never leave the room */
+  private viewing(v: unknown, trip: string): Viewing {
     const o = (v && typeof v === 'object' ? v : {}) as Partial<Viewing>;
-    return { trip: o.trip ? clean(o.trip, 40) : null, visible: o.visible !== false };
+    const here = o.trip === trip;
+    return { trip: here ? trip : null, visible: here && o.visible !== false };
   }
 
   /** one entry per person, also with several tabs open; visible wins */
