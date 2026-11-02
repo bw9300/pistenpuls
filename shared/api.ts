@@ -40,6 +40,8 @@ export interface AdminUser {
   invitePending: boolean;
   /** asked for a new password ('wachtwoord vergeten') */
   resetRequested: boolean;
+  /** version of their photo, null without one */
+  avatar: number | null;
 }
 
 export interface AdminState {

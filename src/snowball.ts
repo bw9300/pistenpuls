@@ -27,6 +27,21 @@ const figure = (c: string, photo: string | null) => {
 };
 
 export const COLORS = { me: '#E0533D', them: '#5B9BD5' };
+/** the result stays put for a moment: whoever is still tapping or pressing space mustn't close it by accident */
+export const END_LOCK_MS = 2000;
+export function lockEnd(end: HTMLElement, ...more: HTMLButtonElement[]) {
+  const buttons = [...end.querySelectorAll('button'), ...more];
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  for (const x of buttons) x.disabled = true;
+  end.classList.add('locked');
+  end.style.setProperty('--lock', END_LOCK_MS + 'ms');
+  setTimeout(() => {
+    for (const x of buttons) x.disabled = false;
+    end.classList.remove('locked');
+    (end.querySelector('[data-again]') as HTMLElement || end.querySelector('[data-close]') as HTMLElement)?.focus();
+  }, END_LOCK_MS);
+}
+
 export const fmt = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 // ---------- the game ----------
@@ -173,9 +188,9 @@ export function snowballScreen(b: HTMLElement, live: Live, first: GameState, don
     field.append(end);
     end.querySelector<HTMLButtonElement>('[data-close]')!.onclick = done;
     end.querySelector<HTMLButtonElement>('[data-again]')?.addEventListener('click', again);
-    (end.querySelector('[data-again]') as HTMLElement || end.querySelector('[data-close]') as HTMLElement).focus();
     b.classList.add('over');
     q<HTMLButtonElement>('[data-quit]').textContent = 'Sluiten';
+    lockEnd(end, q<HTMLButtonElement>('[data-quit]'));
   }
 
   return {

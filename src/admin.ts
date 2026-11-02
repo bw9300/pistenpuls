@@ -89,6 +89,7 @@ function personForm(d: AdminState, u: AdminUser | null) {
 function people(d: AdminState) {
   const tripName = (id: string) => d.trips.find((t) => t.id === id)?.naam || '?';
   const rows = [...d.users].sort((a, b) => +b.resetRequested - +a.resetRequested).map((u) => `<li class="aitem" data-user="${u.id}">
+      <i class="aface">${u.avatar ? `<img src="/api/avatar/${encodeURIComponent(u.id)}?v=${u.avatar}" alt="">` : esc((u.naam.trim()[0] || '?').toUpperCase())}</i>
       <div class="amain"><b>${esc(u.naam)}${u.isAdmin ? ' <span class="atag">admin</span>' : ''}${u.resetRequested ? ' <span class="atag areset">wachtwoord vergeten: stuur een nieuwe link</span>' : ''}</b><small>${esc(u.email)}</small>
         <div class="achips">${u.trips.map((t) => `<span>${esc(tripName(t))}</span>`).join('') || '<em>geen reis</em>'}</div>
         <small>laatst gezien ${seen(u.lastSeen)} · ${u.sessions} ${u.sessions === 1 ? 'apparaat' : 'apparaten'}${u.invitePending ? ' · link verstuurd, nog niet geopend' : ''}</small></div>
@@ -134,6 +135,46 @@ async function loadOnline() {
 }
 
 // ---------- events ----------
+// ---------- a photo for someone (admins may upload one; people themselves only use the camera) ----------
+const PHOTO = 320;
+/** a picture file → the square around the face (middle, a bit high: portraits have the face in the top half) as a small JPEG */
+function squarePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const S = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - S) / 2, sy = img.naturalHeight > img.naturalWidth ? (img.naturalHeight - S) * 0.25 : 0;
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = PHOTO;
+      cv.getContext('2d')!.drawImage(img, sx, sy, S, S, 0, 0, PHOTO, PHOTO);
+      resolve(cv.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Dit bestand is geen foto die de browser kan openen.')); };
+    img.src = url;
+  });
+}
+function uploadPhoto(id: string, naam: string, out: HTMLElement) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/webp,image/heic';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const image = await squarePhoto(file);
+      out.innerHTML = `<div class="aphoto"><img src="${image}" alt="Nieuwe foto van ${esc(naam)}"><div><p class="msrc">Zo komt de foto van ${esc(naam)} eruit te zien. Een gezicht, goed in het midden?</p>
+        <div class="grp"><button type="button" class="primary" data-save>Opslaan</button><button type="button" data-cancel>Annuleren</button></div></div></div>`;
+      out.querySelector<HTMLButtonElement>('[data-cancel]')!.onclick = () => (out.innerHTML = '');
+      out.querySelector<HTMLButtonElement>('[data-save]')!.onclick = async () => {
+        try { await api(`/admin/users/${id}/avatar`, { method: 'PUT', body: { image } }); await reload(); }
+        catch (e) { out.insertAdjacentHTML('beforeend', `<p class="werr">${esc((e as Error).message)}</p>`); }
+      };
+    } catch (e) { out.innerHTML = `<p class="werr">${esc((e as Error).message)}</p>`; }
+  };
+  input.click();
+}
+
 function formData(f: HTMLFormElement) {
   const fd = new FormData(f);
   return { naam: String(fd.get('naam') || ''), email: String(fd.get('email') || ''), area: String(fd.get('area') || ''), aankomst: String(fd.get('aankomst') || ''), trips: fd.getAll('trip').map(String) };
@@ -186,11 +227,12 @@ function wire(root: HTMLElement = box!) {
     if (x.dataset.act === 'link') return makeLink(id, out);
     if (x.dataset.act === 'edit') { out.innerHTML = personForm(data!, u); wire(out); return; }
     if (x.dataset.act === 'more') {
-      out.innerHTML = `<div class="grp"><button type="button" data-more="logout">Overal uitloggen</button><button type="button" data-more="photo">Foto verwijderen</button><button type="button" data-more="delete"${u.isAdmin ? ' disabled' : ''}>Verwijderen</button></div>`;
+      out.innerHTML = `<div class="grp"><button type="button" data-more="logout">Overal uitloggen</button><button type="button" data-more="upload">Foto uploaden</button><button type="button" data-more="photo">Foto verwijderen</button><button type="button" data-more="delete"${u.isAdmin ? ' disabled' : ''}>Verwijderen</button></div>`;
       out.querySelectorAll<HTMLElement>('[data-more]').forEach((m) => m.addEventListener('click', async () => {
         try {
           if (m.dataset.more === 'logout' && confirm(`${u.naam} op alle apparaten uitloggen? Daarna is een nieuwe link nodig.`)) { await api(`/admin/users/${id}/logout`, { method: 'POST' }); await reload(); }
-          if (m.dataset.more === 'photo' && confirm(`De foto van ${u.naam} verwijderen? Dan staat de voorletter er weer.`)) { await api(`/admin/users/${id}/avatar`, { method: 'DELETE' }); m.textContent = 'Foto verwijderd'; }
+          if (m.dataset.more === 'upload') return uploadPhoto(id, u.naam, out);
+          if (m.dataset.more === 'photo' && confirm(`De foto van ${u.naam} verwijderen? Dan staat de voorletter er weer.`)) { await api(`/admin/users/${id}/avatar`, { method: 'DELETE' }); await reload(); }
           if (m.dataset.more === 'delete' && confirm(`${u.naam} verwijderen? Berichten in de chat blijven staan.`)) { await api(`/admin/users/${id}`, { method: 'DELETE' }); await reload(); }
         } catch (e) { out.insertAdjacentHTML('beforeend', `<p class="werr">${esc((e as Error).message)}</p>`); }
       }));

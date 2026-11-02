@@ -127,6 +127,12 @@ export function createApp<E extends Env>(platform: Platform<E>) {
     // the address has the version in it (?v=…), so a browser may keep it
     return c.body(bin, 200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=31536000, immutable' });
   });
+  app.put('/admin/users/:id/avatar', signedIn, admin, async (c) => {
+    const { image } = await body(c);
+    if (typeof image !== 'string' || image.length > AVATAR_MAX || !AVATAR_RE.test(image)) return c.json({ error: 'Deze foto kan niet worden opgeslagen.' }, 400);
+    await dir(c).setAvatar(c.req.param('id')!, image);
+    return c.json({ ok: true });
+  });
   app.delete('/admin/users/:id/avatar', signedIn, admin, async (c) => { await dir(c).deleteAvatar(c.req.param('id')!); return c.json({ ok: true }); });
 
   /** a 15-minute link to sign in on another device */

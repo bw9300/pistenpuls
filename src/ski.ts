@@ -5,7 +5,7 @@ import type { GameEvent, GameState, PisteRef } from '../shared/games';
 import { MIN_TAP_MS, SKI_TAPS } from '../shared/ski';
 import type { Live } from './live';
 import { esc } from './settings';
-import { COLORS, fmt } from './snowball';
+import { COLORS, fmt, lockEnd } from './snowball';
 import { avatarImage } from './avatars';
 
 /** what the race needs from the dashboard's 3D scene (app.ts) */
@@ -99,8 +99,8 @@ function skier(title: string, naam: string, jacket: string, head: string) {
   });
   const faceM = new THREE.SpriteMaterial({ map: draw(null) });
   const headS = new THREE.Sprite(faceM);
-  headS.scale.set(0.5, 0.5, 1); headS.position.y = 1.05; body.add(headS);
-  const hat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat('#F4EDE1')); hat.position.y = 1.33; body.add(hat);
+  headS.scale.set(0.66, 0.66, 1); headS.position.y = 1.12; headS.renderOrder = 5; body.add(headS);
+  const hat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat('#F4EDE1')); hat.position.y = 1.47; body.add(hat);
   body.rotation.x = 0.2;
   g.add(body);
   // name above the head, always readable
@@ -111,7 +111,7 @@ function skier(title: string, naam: string, jacket: string, head: string) {
     c.fillStyle = '#F4EDE1'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(title.slice(0, 14), 256 + 12, 66);
   });
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, depthTest: false, transparent: true }));
-  label.scale.set(2.4, 0.6, 1); label.position.y = 1.75; label.renderOrder = 10;
+  label.scale.set(2.4, 0.6, 1); label.position.y = 1.95; label.renderOrder = 10;
   g.add(label);
   g.scale.setScalar(FIG);
   /** their photo arrived: put it on the face */
@@ -229,9 +229,11 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
     // camera: behind and above the two, looking at the one in front a bit more
     const lead = Math.max(disp[me], disp[them.id]), mid = (disp[me] + disp[them.id]) / 2, at = path.at(mid * 0.4 + lead * 0.6);
     const spread = Math.abs(disp[me] - disp[them.id]);
-    const back = 120 + Math.min(260, spread * 0.6), up = 70 + Math.min(160, spread * 0.4);
-    wantLook.set(at.x, world.hAt(at.x, at.z) + FIG, at.z);
-    want.set(at.x - at.tx * back + at.tz * 40, wantLook.y + up, at.z - at.tz * back - at.tx * 40);
+    // before the start: close up, from the front, so you see both faces; at 'Ga!' the camera pulls back behind them
+    const before = g.status === 'countdown';
+    const back = before ? -70 : 120 + Math.min(260, spread * 0.6), up = before ? 14 : 70 + Math.min(160, spread * 0.4), side = before ? 0 : 40;
+    wantLook.set(at.x, world.hAt(at.x, at.z) + FIG * (before ? 1.1 : 1), at.z);
+    want.set(at.x - at.tx * back + at.tz * side, wantLook.y + up, at.z - at.tz * back - at.tx * side);
     const ground = world.hAt(want.x, want.z) + 40;
     if (want.y < ground) want.y = ground;
     const kc = camReady ? Math.min(1, dt * 2.2) : Math.min(1, dt * 1.2);
@@ -262,9 +264,9 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
     b.append(end);
     end.querySelector<HTMLButtonElement>('[data-close]')!.onclick = done;
     end.querySelector<HTMLButtonElement>('[data-again]')?.addEventListener('click', again);
-    (end.querySelector('[data-again]') as HTMLElement || end.querySelector('[data-close]') as HTMLElement).focus();
     b.classList.add('over');
     q<HTMLButtonElement>('[data-quit]').textContent = 'Sluiten';
+    lockEnd(end, q<HTMLButtonElement>('[data-quit]'));
   }
 
   const clockT = window.setInterval(() => { if (endAt && g.status === 'playing') clock.textContent = fmt(Math.max(0, endAt - Date.now())); }, 250);

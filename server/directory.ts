@@ -209,14 +209,15 @@ export function directory(db: Db) {
       const users = await db.all(`SELECT u.id, u.email, u.naam, u.is_admin, u.last_seen,
           (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id) AS sessions,
           (SELECT COUNT(*) FROM invites i WHERE i.user_id = u.id AND i.used IS NULL AND i.expires > ?) AS invites,
-          (SELECT COUNT(*) FROM reset_requests r WHERE r.user_id = u.id) AS reset
+          (SELECT COUNT(*) FROM reset_requests r WHERE r.user_id = u.id) AS reset,
+          (SELECT updated FROM avatars a WHERE a.user_id = u.id) AS avatar
         FROM users u ORDER BY u.naam COLLATE NOCASE`, Date.now());
       const members = await db.all('SELECT trip_id, user_id FROM trip_members');
       return {
         trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomst: t.aankomst, members: Number(t.members) })),
         users: users.map((u) => ({
           id: u.id, email: u.email, naam: u.naam, isAdmin: !!Number(u.is_admin), lastSeen: u.last_seen == null ? null : Number(u.last_seen),
-          sessions: Number(u.sessions), invitePending: Number(u.invites) > 0, resetRequested: Number(u.reset) > 0,
+          sessions: Number(u.sessions), invitePending: Number(u.invites) > 0, resetRequested: Number(u.reset) > 0, avatar: u.avatar == null ? null : Number(u.avatar),
           trips: members.filter((m) => m.user_id === u.id).map((m) => m.trip_id),
         })),
       };
