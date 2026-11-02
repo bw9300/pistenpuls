@@ -262,8 +262,8 @@ body.wizard .toasts,body.wizard .chat{display:none}
 .mob .brand{order:1;min-width:0}
 .mob .clock{order:2;margin-left:auto}
 .mob .who{order:3}
-.mob .tabs{order:4;flex:1 1 0;min-width:0;justify-content:flex-end;padding:4px;gap:4px}
-.mob .tabs button{display:block;flex:0 1 auto;min-width:0;padding:7px 12px;font-size:15px;overflow:hidden;text-overflow:ellipsis}
+.mob .tabs{order:4;flex:0 1 auto;min-width:0;margin-left:auto;padding:4px;gap:2px}
+.mob .tabs button{display:block;flex:0 1 auto;min-width:0;padding:7px 14px;font-size:15px;overflow:hidden;text-overflow:ellipsis}
 .mob .tabs button.on .pinic{display:inline-block;vertical-align:-2px}
 .mob .tabs .tnum,.mob .who .wlbl{display:none}
 .mob .tabs .pinic{margin-left:5px;width:13px;height:13px}
@@ -273,3 +273,4 @@ body.wizard .toasts,body.wizard .chat{display:none}
 #gl.grabbing{cursor:grabbing}
 /* phone: keep the scene bar clear of the chat and menu buttons (2 × 48px + gaps, in screen pixels; --s = stage scale) */
 .mob .bottom,.compact .bottom{right:calc(136px / var(--s,1))}
+.tabs .tnum{margin-right:.35em}

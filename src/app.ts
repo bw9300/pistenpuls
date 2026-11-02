@@ -211,7 +211,7 @@ const fmtDay=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',mont
 const fmtDate=new Intl.DateTimeFormat('nl-NL',{weekday:'long',day:'numeric',month:'long'});
 const D=iso=>new Date(iso+'T00:00:00');
 const nl=n=>Math.round(n).toLocaleString('nl-NL');
-$('tabs').innerHTML=TRIPS.map((t,i)=>`<button type="button" data-trip="${i}" aria-pressed="false"><span class="tnum">${i+1} · </span>${esc(t.kort)}<svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`).join('');
+$('tabs').innerHTML=TRIPS.map((t,i)=>`<button type="button" data-trip="${i}" aria-pressed="false"><span class="tnum">${i+1} ·</span>${esc(t.kort)}<svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`).join('');
 $('segs').innerHTML=SCENES.map((s,i)=>`<button type="button" class="seg" data-seg="${i}" aria-label="Ga naar ${s}"><div>${s}</div><div class="tr"><i></i></div></button>`).join('');
 const segEls=[...document.querySelectorAll('.seg')],sceneEls=[...document.querySelectorAll('.scene')],tabEls=[...$('tabs').children];
 const greetWord=()=>{const h=new Date().getHours();return h<6?'Goedenacht':h<12?'Goedemorgen':h<18?'Goedemiddag':'Goedenavond'};
