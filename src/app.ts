@@ -378,7 +378,17 @@ function fit(){VW=innerWidth;VH=innerHeight;
   // keep roughly the same sideways view on tall screens
   const hf=2*Math.atan(Math.tan(19*PI/180)*16/9);camera.fov=Math.min(72,Math.max(38,2*Math.atan(Math.tan(hf/2)/camera.aspect)*180/PI));
   if(MOB)camera.setViewOffset(VW,VH,0,VH*.12,VW,VH);else camera.clearViewOffset();camera.updateProjectionMatrix()}
+// top bar: never wrap; when it doesn't fit, drop the least important bits one by one (tb1…tb5, see style.css)
+const topbar=document.querySelector('.topbar'),TB=5;let tbQueued=false;
+function fitTopbar(){tbQueued=false;for(let i=1;i<=TB;i++)topbar.classList.remove('tb'+i);if(MOB)return;
+  const over=()=>{const kids=[...topbar.children].flatMap(e=>getComputedStyle(e).display==='contents'?[...e.children]:[e]).filter(e=>!e.hidden&&e.offsetWidth);
+    return kids.reduce((w,e)=>w+e.offsetWidth,0)+(kids.length-1)*16>topbar.clientWidth};
+  for(let i=1;i<=TB&&over();i++)topbar.classList.add('tb'+i)}
+const queueTopbar=()=>{if(!tbQueued){tbQueued=true;requestAnimationFrame(fitTopbar)}};
+// names, the weather label and who's online change over time: re-check when the bar's content changes
+new MutationObserver(queueTopbar).observe(topbar,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden']});
 addEventListener('resize',fit);document.addEventListener('visibilitychange',fit);fit();
+addEventListener('resize',queueTopbar);document.fonts&&document.fonts.ready.then(queueTopbar);queueTopbar();
 
 // ---------- start ----------
 const liveUI=ME?startLiveUI({apiBase:RT.apiBase,trips:TRIPS.map(t=>({id:t.id,naam:t.kort})),active:null,

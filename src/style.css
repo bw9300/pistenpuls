@@ -25,7 +25,10 @@ body{background:var(--night);color:var(--snow);font-family:var(--body);overflow:
 .brand span strong{color:var(--lantaarn)}
 .brand em{font-style:normal;font-size:22px;color:var(--snow);margin-left:14px;padding-left:16px;border-left:1px solid var(--line);white-space:nowrap}
 .tabs{display:flex;gap:8px;padding:6px;border-radius:999px}
-.narrow #topCount,.narrow #wxNow{display:none}
+/* top bar never wraps; fitTopbar() in app.ts adds tb1…tb5 when it doesn't fit, least important first */
+.brand span,.brand em,.who,.clock div,.tabs button{white-space:nowrap}
+.topbar{gap:16px}
+.tb1 #wxNow,.tb2 .who .wlbl,.tb3 #topCount,.tb4 .tabs .tnum,.tb5 #date{display:none}
 /* ===== phone, portrait (.mob): mountains on top, the scene's tiles stacked at the bottom ===== */
 .mob .tv,.compact .tv{display:none}
 .mob .topbar{top:14px;left:16px;right:16px;height:auto;flex-wrap:wrap;row-gap:10px}
