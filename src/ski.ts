@@ -75,7 +75,7 @@ function canvasTex(w: number, h: number, draw: (c: CanvasRenderingContext2D) => 
   return t;
 }
 
-function skier(title: string, naam: string, jacket: string, head: string) {
+function skier(title: string, naam: string, jacket: string, head: string, tagY = 2.05) {
   const g = new THREE.Group(), mat = (c: string | number) => new THREE.MeshLambertMaterial({ color: c });
   const dark = mat('#26384A'), coat = mat(jacket);
   // skis
@@ -88,19 +88,30 @@ function skier(title: string, naam: string, jacket: string, head: string) {
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.36, 8), coat); arm.position.set(x, 0.66, 0.08); arm.rotation.x = -0.7; body.add(arm);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 6), dark); pole.position.set(x * 1.2, 0.42, 0.22); pole.rotation.x = -0.35; body.add(pole);
   }
-  // the head: a round face that always looks at the camera, with their photo (or first letter on their colour)
+  // the head: a round face that always looks at the camera, with their photo (or first letter on their colour),
+  // and a bobble hat in their jacket colour on top
   const letter = (naam.trim()[0] || '?').toUpperCase();
-  const draw = (img: HTMLImageElement | null) => canvasTex(256, 256, (c) => {
-    c.beginPath(); c.arc(128, 128, 120, 0, Math.PI * 2); c.closePath();
+  const W = 256, H = 320, FX = 128, FY = 205, FR = 108;
+  const draw = (img: HTMLImageElement | null) => canvasTex(W, H, (c) => {
+    c.beginPath(); c.arc(FX, FY, FR, 0, Math.PI * 2); c.closePath();
     c.fillStyle = head; c.fill();
-    if (img) { c.save(); c.clip(); c.drawImage(img, 8, 8, 240, 240); c.restore(); }
-    else { c.fillStyle = '#fff'; c.font = '800 130px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(letter, 128, 138); }
-    c.lineWidth = 12; c.strokeStyle = jacket; c.stroke();
+    if (img) { c.save(); c.clip(); c.drawImage(img, FX - FR, FY - FR, FR * 2, FR * 2); c.restore(); }
+    else { c.fillStyle = '#fff'; c.font = '800 120px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(letter, FX, FY + 18); }
+    c.lineWidth = 10; c.strokeStyle = jacket; c.stroke();
+    // the hat: a knitted dome, a white band, a pompom
+    c.beginPath(); c.ellipse(FX, 150, 106, 116, 0, Math.PI, Math.PI * 2); c.closePath();
+    c.fillStyle = jacket; c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 6;
+    for (const x of [-60, -20, 20, 60]) { c.beginPath(); c.moveTo(FX + x, 146); c.quadraticCurveTo(FX + x * 0.6, 80, FX + x * 0.25, 40); c.stroke(); }
+    c.fillStyle = '#F4EDE1'; c.beginPath(); c.roundRect(16, 126, W - 32, 42, 21); c.fill();
+    c.beginPath(); c.arc(FX, 34, 30, 0, Math.PI * 2); c.fill();
   });
   const faceM = new THREE.SpriteMaterial({ map: draw(null) });
   const headS = new THREE.Sprite(faceM);
-  headS.scale.set(0.66, 0.66, 1); headS.position.y = 1.12; headS.renderOrder = 5; body.add(headS);
-  const hat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat('#F4EDE1')); hat.position.y = 1.47; body.add(hat);
+  const size = 0.7; // width of the head; the hat makes it taller
+  headS.scale.set(size, size * H / W, 1);
+  headS.position.y = 1.12 + ((FY - H / 2) / H) * size * (H / W); // the face stays at neck height, the hat sticks out above
+  headS.renderOrder = 5; body.add(headS);
   body.rotation.x = 0.2;
   g.add(body);
   // name above the head, always readable
@@ -111,7 +122,7 @@ function skier(title: string, naam: string, jacket: string, head: string) {
     c.fillStyle = '#F4EDE1'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(title.slice(0, 14), 256 + 12, 66);
   });
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, depthTest: false, transparent: true }));
-  label.scale.set(2.4, 0.6, 1); label.position.y = 1.95; label.renderOrder = 10;
+  label.scale.set(2.4, 0.6, 1); label.position.y = tagY; label.renderOrder = 10;
   g.add(label);
   g.scale.setScalar(FIG);
   /** their photo arrived: put it on the face */
@@ -121,7 +132,7 @@ function skier(title: string, naam: string, jacket: string, head: string) {
 
 function gate(w: World, p: { x: number; z: number; tx: number; tz: number }, color: string) {
   const g = new THREE.Group(), m = new THREE.MeshLambertMaterial({ color }), nx = -p.tz, nz = p.tx, half = 22;
-  const H = FIG * 1.9;
+  const H = FIG * 2.6; // high enough to ski under, hats included
   for (const s of [-1, 1]) {
     const x = p.x + nx * half * s, z = p.z + nz * half * s, y = w.hAt(x, z);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, H, 8), m); pole.position.set(x, y + H / 2, z); g.add(pole);
@@ -182,7 +193,7 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
   // ---------- the 3D part ----------
   let path: ReturnType<typeof pathOf> = null, world: World | null = null;
   const group = new THREE.Group();
-  const skiers = { [me]: skier('Jij', self.naam, COLORS.me, '#E0533D'), [them.id]: skier(them.naam, them.naam, COLORS.them, '#5B9BD5') };
+  const skiers = { [me]: skier('Jij', self.naam, COLORS.me, '#E0533D'), [them.id]: skier(them.naam, them.naam, COLORS.them, '#5B9BD5', 2.7) } // name tags at different heights: side by side they'd overlap;
   for (const id of [me, them.id]) avatarImage(id).then((img) => skiers[id].face(img));
   const camPos = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
   let t = 0, camReady = false;

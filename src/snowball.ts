@@ -14,7 +14,8 @@ let figN = 0;
 const figure = (c: string, photo: string | null) => {
   const clip = 'fh' + figN++;
   const head = photo
-    ? `<clipPath id="${clip}"><circle cx="30" cy="25" r="13"/></clipPath><circle cx="30" cy="25" r="14" fill="${c}"/><image href="${photo}" x="17" y="12" width="26" height="26" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>`
+    ? `<clipPath id="${clip}"><circle cx="30" cy="28" r="13"/></clipPath><circle cx="30" cy="28" r="14" fill="${c}"/><image href="${photo}" x="17" y="15" width="26" height="26" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>
+  <path d="M16.5 20Q30 1 43.5 20Z" fill="${c}"/><rect x="15.5" y="17" width="29" height="5" rx="2.5" fill="#F4EDE1"/><circle cx="30" cy="6" r="4.5" fill="#F4EDE1"/>`
     : `<circle cx="30" cy="27" r="12" fill="#F1C9A5"/><circle cx="35" cy="26" r="1.6" fill="#1B2633"/><path d="M33 32q3 1.5 5-.5" stroke="#1B2633" stroke-width="1.3" fill="none" stroke-linecap="round"/>
   <path d="M17.5 24Q30 4 42.5 24Z" fill="${c}"/><rect x="16.5" y="21" width="27" height="5" rx="2.5" fill="#F4EDE1"/><circle cx="30" cy="9" r="4.5" fill="#F4EDE1"/>`;
   return `<svg class="fig" viewBox="0 0 60 100" aria-hidden="true">
