@@ -218,7 +218,7 @@ const fmtDate=new Intl.DateTimeFormat('nl-NL',{weekday:'long',day:'numeric',mont
 const D=iso=>new Date(iso+'T00:00:00');
 const nl=n=>Math.round(n).toLocaleString('nl-NL');
 $('tabs').innerHTML=TRIPS.map((t,i)=>`<button type="button" data-trip="${i}" aria-pressed="false"><span class="tnum">${i+1} ·</span>${esc(t.kort)}<b class="tbadge" hidden></b><svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`).join('');
-$('segs').innerHTML=SCENES.map((s,i)=>`<button type="button" class="seg" data-seg="${i}" aria-label="Ga naar ${s}"><div>${s}</div><div class="tr"><i></i></div></button>`).join('');
+$('segs').innerHTML=SCENES.map((s,i)=>`<button type="button" class="seg" data-seg="${i}" aria-label="Ga naar ${s}"><div><svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>${s}</div><div class="tr"><i></i></div></button>`).join('');
 const segEls=[...document.querySelectorAll('.seg')],sceneEls=[...document.querySelectorAll('.scene')],tabEls=[...$('tabs').children];
 const greetWord=()=>{const h=new Date().getHours();return h<6?'Goedenacht':h<12?'Goedemorgen':h<18?'Goedemiddag':'Goedenavond'};
 const daysTo=t=>Math.max(0,Math.ceil((D(t.van)-Date.now())/864e5));
@@ -316,10 +316,18 @@ async function goTrip(n){
   $('flyTo').textContent=T.naam;flight={t:0,swapped:false,T,idx};sc=-1;scT=0;showScene(-1);if(pinned)savePin(idx);
   prepare(T,false);
 }
+// scene pin: click the current scene once more to stay on it (and again to let go); remembered in this browser
+let scenePin=null;try{const v=localStorage.getItem('pp-scene-pin');if(v!==null&&+v>=0&&+v<SCENES.length)scenePin=+v}catch(e){}
+const firstScene=()=>scenePin===null?0:scenePin;
+function saveScenePin(){try{scenePin===null?localStorage.removeItem('pp-scene-pin'):localStorage.setItem('pp-scene-pin',String(scenePin))}catch(e){}
+  $('segs').classList.toggle('pinned',scenePin!==null);
+  segEls.forEach((e,k)=>e.title=k!==sc?'':scenePin!==null?'Vastgezet. Klik om de rondvlucht te hervatten.':'Klik om deze scène vast te zetten')}
 function next(){if(sc<0)return;if(sc<SCENES.length-1){sc++;scT=0;showScene(sc)}else if(pinned||TRIPS.length<2){sc=0;scT=0;showScene(0)}else goTrip(trip+1)}
 function prev(){if(sc<=0)return;sc--;scT=0;showScene(sc)}
 $('bNext').onclick=next;$('bPrev').onclick=prev;
-document.querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(sc<0||flight)return;sc=+b.dataset.seg;scT=0;showScene(sc)});
+document.querySelectorAll('[data-seg]').forEach(b=>b.onclick=()=>{if(sc<0||flight)return;const i=+b.dataset.seg;
+  if(i===sc)scenePin=scenePin===null?i:null;else{sc=i;scT=0;showScene(sc);if(scenePin!==null)scenePin=i}
+  saveScenePin()});
 document.querySelectorAll('[data-trip]').forEach(b=>b.onclick=()=>{const i=+b.dataset.trip;if(flight||sc<0)return;if(i===trip){pinned=!pinned;savePin()}else goTrip(i)});
 savePin();
 const multi=TRIPS.length>1;$('tabs').hidden=!multi;
@@ -384,7 +392,7 @@ setInterval(()=>TRIPS.forEach(T=>{if(T.state==='ready')loadWebcams(T)}),9*60*100
   const start=trip,T=TRIPS[start];await prepare(T,true);
   if(T.state!=='ready'){setTimeout(boot,61000);return}
   trip=start;swapTo(T);const w=T.world;focusGoal=sceneFocus(w,0);target.copy(focusGoal);orbit.r=orbitGoal.r=SCENE_CAM[0].r*w.R*camZoom();orbit.h=orbitGoal.h=SCENE_CAM[0].h*w.R*camZoom();
-  sc=0;scT=0;showScene(0);
+  sc=firstScene();scT=0;showScene(sc);saveScenePin();
   for(const o of TRIPS)if(o!==T)await prepare(o,false);  // preload the others one by one
 })();
 
@@ -398,11 +406,11 @@ function frame(now){
     const a=flight.t<.35?flight.t/.35:flight.t>.55?Math.max(0,1-(flight.t-.55)/.45):1;wolk.style.opacity=reduce?0:a;
     if(!flight.swapped&&flight.t>=.42){
       if(flight.T.state==='ready'){flight.swapped=true;trip=flight.idx;swapTo(flight.T);const w=flight.T.world;focusGoal=sceneFocus(w,0);target.copy(focusGoal);orbit.r=SCENE_CAM[0].r*w.R*camZoom();orbit.h=SCENE_CAM[0].h*w.R*1.8*camZoom();orbitGoal.r=orbit.r;orbitGoal.h=SCENE_CAM[0].h*w.R*camZoom()}
-      else{flight.t=.42;if(flight.T.state==='error'){flight=null;wolk.style.opacity=0;sc=0;scT=0;showScene(0)}}
+      else{flight.t=.42;if(flight.T.state==='error'){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}}
     }
-    if(flight&&flight.t>=1){flight=null;wolk.style.opacity=0;sc=0;scT=0;showScene(0)}
-  } else if(!paused&&sc>=0&&!controls.holding()){scT+=dt;if(scT>=SCENE_DUR)next()}
-  if(sc>=0)segEls[sc].querySelector('i').style.width=Math.min(100,scT/SCENE_DUR*100)+'%';
+    if(flight&&flight.t>=1){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}
+  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()){scT+=dt;if(scT>=SCENE_DUR)next()}
+  if(sc>=0)segEls[sc].querySelector('i').style.width=(scenePin!==null?100:Math.min(100,scT/SCENE_DUR*100))+'%';
   const T=shown;if(!T||!T.world){return}
   const w=T.world,k=1-Math.exp(-dt*.6);
   orbit.r+=(orbitGoal.r-orbit.r)*k;orbit.h+=(orbitGoal.h-orbit.h)*k;target.lerp(focusGoal,k);
