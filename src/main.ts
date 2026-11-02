@@ -12,6 +12,12 @@ if (/(^|[.-])preview[.-]/.test(location.hostname)) {
   document.title = 'Pistenpuls (preview)';
 }
 
+// like an app: the page itself never zooms. iOS ignores user-scalable=no, so also stop its pinch gestures,
+// and ctrl+wheel (a trackpad pinch on a laptop). The 3D map still gets these events for its own zoom (controls.ts).
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+
 // the stylesheet didn't arrive (see ppRetry in index.html): try once more
 if (getComputedStyle(document.getElementById('stage')!).position !== 'fixed') ppRetry();
 else setTimeout(() => { try { sessionStorage.removeItem('pp-retry'); } catch {} }, 10_000);

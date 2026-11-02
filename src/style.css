@@ -8,6 +8,11 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%;margin:0}
+/* like an app: no zooming the page (no pinch, no double-tap zoom); the 3D map zooms itself (controls.ts) */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+*{touch-action:pan-x pan-y;-webkit-tap-highlight-color:transparent}
+/* iOS zooms in on inputs with small text: never below 16px */
+input,select,textarea{font-size:max(16px,1em)}
 body{background:var(--night);color:var(--snow);font-family:var(--body);overflow:hidden}
 #sky{position:fixed;inset:0;transition:background 2s linear}
 #gl{position:fixed;inset:0;display:block;width:100%;height:100%}
@@ -342,7 +347,9 @@ body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:h
 .sbch{display:inline-grid;place-items:center;width:30px;height:30px;margin-left:6px;padding:0;vertical-align:middle;background:#1C3042;border:1px solid var(--line);border-radius:50%;cursor:pointer;transition:transform .15s,background .15s}
 .menu .sbch{flex:none;padding:0;border-radius:50%;background:#1C3042}
 .menu .sbch:hover,.menu .sbch:focus-visible{background:#2B4A66;transform:scale(1.12) rotate(-12deg)}
-.people li .sbch{margin-left:2px}
+.sbchs{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}.sbchs .sbch{margin-left:0}
+.people li .sbchs{margin-left:2px;flex-direction:row}
+.menu .sbch .skic{width:18px;height:18px}
 .msgs .m b .sbch{width:24px;height:24px;margin-left:6px}.msgs .m b .sbch .sbic{width:16px;height:16px}
 .msgs .sys{align-self:center;max-width:92%;text-align:center;padding:4px 12px;border-radius:12px;background:rgba(91,155,213,.14);color:var(--muted)}
 .msgs .sys p{margin:0;font-size:14px;line-height:1.35}.msgs .sys time{font-size:11px;color:var(--quiet)}
@@ -416,11 +423,6 @@ body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:h
 .skic{width:20px;height:20px;flex:none}
 .skic.big{width:64px;height:64px}
 .skic.spin{animation:sbspin 1.1s cubic-bezier(.5,.1,.5,.9) infinite}
-.sbpick{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
-.sb .sbpick button{min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 10px;border-radius:18px}
-.sb .sbpick button:hover,.sb .sbpick button:focus-visible{background:#2B4A66;outline:2px solid var(--lantaarn);outline-offset:1px}
-.sbpick b{font:800 21px var(--display)}.sbpick small{font-size:14px;color:var(--quiet);font-weight:500}
-@media (max-width:380px){.sbpick{grid-template-columns:1fr}.sb .sbpick button{min-height:110px}}
 
 /* ---------- ski race: see-through over the map ---------- */
 body.racing #stage,body.racing .menubtn,body.racing .toasts,body.racing #marker{visibility:hidden}
@@ -451,3 +453,4 @@ body.racing #stage,body.racing .menubtn,body.racing .toasts,body.racing #marker{
 .sbend.skend p{color:var(--muted);font-size:19px}
 @media (max-height:560px){.skbottom .sbhelp{display:none}.sb .sktap{min-height:80px}}
 .sktap .skic path{stroke:#fff}.sktap .skic circle{fill:#fff}
+@media (pointer:coarse){.linkbox input{font-size:16px}}

@@ -59,21 +59,6 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
     }, 10_000);
   }
 
-  // ---------- choose a game ----------
-  function pick(live: Live | undefined, to: string, naam: string) {
-    const b = overlay('', `<div class="sbcard">
-      <h2>Wat wil je spelen met ${esc(naam)}?</h2>
-      <div class="sbpick">
-        <button type="button" data-kind="snowball">${big('snowball')}<b>Sneeuwbalgevecht</b><small>Gooien en bukken</small></button>
-        <button type="button" data-kind="ski">${big('ski')}<b>Skiwedstrijd</b><small>Snel tikken, naar beneden</small></button>
-      </div>
-      <div class="sbrow"><button type="button" data-cancel>Toch niet</button></div></div>`);
-    b.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach((x) => (x.onclick = () => challenge(live, to, naam, x.dataset.kind as GameKind)));
-    b.querySelector<HTMLButtonElement>('[data-cancel]')!.onclick = close;
-    b.querySelector<HTMLButtonElement>('[data-kind]')!.focus();
-    b.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-  }
-
   function challenge(live: Live | undefined, to: string, naam: string, kind: GameKind) {
     if (!live || live.state.status !== 'online') { close(); return opts.toast(`${ICON[kind]}<span>Geen verbinding, probeer het zo nog eens.</span>`, 4000); }
     let piste;
@@ -152,8 +137,8 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
 
   return {
     onGame,
-    /** the button after someone's name: choose a game, then challenge */
-    pick,
+    /** the buttons after someone's name in the chat */
+    challenge,
     /** something's on screen (no toasts about games then) */
     busy: () => !!box,
     onError(error: string) { pending = null; if (box && !screen) close(); opts.toast(`${SNOWBALL}<span>${esc(error)}</span>`, 5000); },

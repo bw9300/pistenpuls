@@ -6,7 +6,7 @@ import { connectLive, type Live, type LiveEvent } from './live';
 import { esc } from './settings';
 import { createGames } from './games';
 import { SNOWBALL } from './snowball';
-import type { Stage } from './ski';
+import { SKIER, type Stage } from './ski';
 
 const $ = (id: string) => document.getElementById(id)!;
 const COLORS = ['#E0533D', '#F0B45A', '#5B9BD5', '#7FB77E', '#B08BD9', '#E58FB1', '#4FB3B0'];
@@ -60,7 +60,7 @@ export function startLiveUI(opts: {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ch]');
     if (!b) return;
     setOpen(false);
-    games.pick(cur(), b.dataset.ch!, b.dataset.naam!);
+    games.challenge(cur(), b.dataset.ch!, b.dataset.naam!, b.dataset.kind === 'ski' ? 'ski' : 'snowball');
   });
   who.onclick = () => setOpen(true);
   addEventListener('pointerdown', (e) => { if (open && !panel.contains(e.target as Node) && !btn.contains(e.target as Node) && !who.contains(e.target as Node)) setOpen(false); });
@@ -140,7 +140,8 @@ export function startLiveUI(opts: {
   /** the snowball after someone's name: challenge them (only when they're online) */
   const challengeBtn = (l: Live, id: string, naam: string) =>
     id !== l.state.me && id !== SYSTEM && l.state.online.some((o) => o.id === id)
-      ? `<button type="button" class="sbch" data-ch="${esc(id)}" data-naam="${esc(naam)}" title="Daag ${esc(naam)} uit voor een spelletje" aria-label="Daag ${esc(naam)} uit voor een spelletje">${SNOWBALL}</button>`
+      ? `<span class="sbchs">${([['snowball', SNOWBALL, 'een sneeuwbalgevecht'], ['ski', SKIER, 'een skiwedstrijd']] as const).map(([k, icon, what]) =>
+          `<button type="button" class="sbch" data-ch="${esc(id)}" data-kind="${k}" data-naam="${esc(naam)}" title="Daag ${esc(naam)} uit voor ${what}" aria-label="Daag ${esc(naam)} uit voor ${what}">${icon}</button>`).join('')}</span>`
       : '';
   const msgHTML = (l: Live, m: ChatMessage, prev?: ChatMessage) => {
     const mine = m.from === l.state.me, sameDay = prev && day(prev.ts) === day(m.ts);
