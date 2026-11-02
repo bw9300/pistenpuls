@@ -2,6 +2,7 @@
 //
 //   npm run area:add -- --id ischgl --naam "Ischgl/Samnaun" --bbox 10.2,46.95,10.35,47.03 [--kort Ischgl] [--regio "Paznaun"] [--van 2027-01-16]
 //   npm run area:add -- --id zillertal          (existing area: only regenerates map.json from its area.json)
+//   npm run area:add -- --id zillertal --apres  (only refresh the après-ski places in map.json)
 //
 // Writes areas/<id>/area.json (only if it doesn't exist yet; edit it afterwards) and areas/<id>/map.json:
 // a ~50 m elevation grid plus pistes, lifts and buildings from OpenStreetMap, in the format src/terrain.ts decodes.
@@ -13,7 +14,7 @@ import { CONFIG, type Area } from '../src/config.ts';
 import { PI, tileRange, makeDem, parseOsm, pisteClass } from '../src/terrain.ts';
 
 const { values: a } = parseArgs({
-  options: { id: { type: 'string' }, naam: { type: 'string' }, kort: { type: 'string' }, regio: { type: 'string' }, van: { type: 'string' }, bbox: { type: 'string' } },
+  options: { id: { type: 'string' }, naam: { type: 'string' }, kort: { type: 'string' }, regio: { type: 'string' }, van: { type: 'string' }, bbox: { type: 'string' }, apres: { type: 'boolean' } },
 });
 if (!a.id || !/^[a-z0-9-]+$/.test(a.id)) fail('Geef een --id op (kleine letters, cijfers en streepjes), bijv. --id ischgl');
 
@@ -32,6 +33,16 @@ if (fs.existsSync(areaFile)) {
   area = { id: a.id!, naam: a.naam!, kort, regio: a.regio || '', hallo: 'Servus', groet: `Servus, ${kort}.`, groetSub: '', van: a.van || '', bbox, meetstations: {} };
 }
 
+const mapFile = path.join(dir, 'map.json');
+if (a.apres) {
+  if (!fs.existsSync(mapFile)) fail('Nog geen map.json: maak eerst het gebied aan (zonder --apres)');
+  const old = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
+  old.apres = await fetchApres(area.bbox);
+  fs.writeFileSync(mapFile, JSON.stringify(old));
+  console.log(`✓ ${mapFile}: ${old.apres.length} après-skiplekken`);
+  process.exit(0);
+}
+
 const store = await buildMap(area.bbox);
 fs.mkdirSync(dir, { recursive: true });
 if (!fs.existsSync(areaFile)) {
@@ -39,7 +50,7 @@ if (!fs.existsSync(areaFile)) {
   console.log(`✓ ${areaFile} aangemaakt: vul regio, groetSub en van (voorgestelde aankomst) nog aan`);
 }
 fs.writeFileSync(path.join(dir, 'map.json'), JSON.stringify(store));
-console.log(`✓ ${path.join(dir, 'map.json')}: ${store.pistes.length} pistes, ${store.lifts.length} liften, ${store.houses.length} gebouwen`);
+console.log(`✓ ${path.join(dir, 'map.json')}: ${store.pistes.length} pistes, ${store.lifts.length} liften, ${store.houses.length} gebouwen, ${store.apres.length} après-skiplekken`);
 
 // ---------------------------------------------------------------------------------------------------------
 
@@ -85,7 +96,34 @@ async function buildMap(bbox: Area['bbox']) {
     pistes: ski.pistes.map((p: any) => [pisteClass(p.diff), enc(p.g)]),
     lifts: ski.lifts.map((l: any) => [l.type, l.name, enc(l.g)]),
     houses,
+    apres: await fetchApres(bbox),
   };
+}
+
+/** bars, pubs, clubs, beer gardens, and huts (restaurants/cafés called …hütte, …alm, …stadl) with a name:
+ *  [kind, name, lon×1e5, lat×1e5, opening hours, website] */
+async function fetchApres(bbox: Area['bbox']) {
+  const [w, s, e, n] = bbox, bb = `${s},${w},${n},${e}`;
+  console.log('Après-ski uit OpenStreetMap…');
+  const hut = 'hütte|huette|hütt|alm|stadl|stall|stub|schirm|iglu|apres|après|alpe';
+  const j = await overpass(`[out:json][timeout:90];(
+    nwr["amenity"~"^(bar|pub|nightclub|biergarten)$"]["name"](${bb});
+    nwr["amenity"~"^(restaurant|cafe)$"]["name"~"${hut}",i](${bb});
+    nwr["apres_ski"="yes"]["name"](${bb});
+    nwr["tourism"="alpine_hut"]["name"](${bb});
+  );out center tags;`);
+  const kind = (t: any) => (t.amenity === 'nightclub' ? 'club' : t.amenity === 'pub' ? 'pub' : t.amenity === 'biergarten' ? 'biergarten'
+    : t.amenity === 'bar' || t.apres_ski === 'yes' ? 'bar' : 'hut');
+  const seen = new Set<string>(), out: (string | number)[][] = [];
+  for (const el of j.elements || []) {
+    const t = el.tags || {}, lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
+    if (!t.name || lat == null || lon < w || lon > e || lat < s || lat > n) continue;
+    const key = t.name.toLowerCase() + Math.round(lat * 500) + Math.round(lon * 500); // the same place as a node and a building
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([kind(t), String(t.name).slice(0, 60), Math.round(lon * 1e5), Math.round(lat * 1e5), String(t.opening_hours || '').slice(0, 120), String(t.website || t['contact:website'] || '').slice(0, 200)]);
+  }
+  return out;
 }
 
 async function terrainTile(z: number, x: number, y: number): Promise<Uint8Array> {

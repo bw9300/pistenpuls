@@ -88,6 +88,7 @@ npm run area:add -- --id ischgl --naam "Ischgl/Samnaun" --bbox 10.2,46.95,10.35,
 `--bbox` is west,zuid,oost,noord in graden (bijv. via https://boundingbox.klokantech.com, formaat CSV).
 Het script maakt `areas/ischgl/area.json` (vul regio en groet daarna aan) en `map.json` (hoogtedata en OpenStreetMap; Overpass kan een paar minuten duren).
 Kaartdata van een bestaand gebied vernieuwen: `npm run area:add -- --id zillertal`.
+Alleen de après-ski (bars, kroegen, clubs, biergartens en hutten uit OpenStreetMap, te zien bij de scène *Sfeer nu*) vernieuwen: `npm run area:add -- --id zillertal --apres`.
 
 Sneeuwhoogtes komen van avalanche.report: dat dekt Tirol, Zuid-Tirol, Trentino en omgeving. Daarbuiten blijft die tegel voorlopig leeg.
 

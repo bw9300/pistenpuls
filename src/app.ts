@@ -9,6 +9,7 @@ import {STORE,esc,tripPickerHTML,wirePicker,readPicker,startWizard} from './sett
 import {startLiveUI} from './live-ui';
 import {renderSettings} from './account';
 import {createControls} from './controls';
+import {createApres} from './apres';
 
 // ME: the signed-in account (server with live), or null when hosted statically (trips chosen in this browser)
 export function startApp(RT,ME){
@@ -184,6 +185,7 @@ async function prepare(T,show){
       try{setStep(T,show,'Bergen laden','Berg bouwen');await new Promise(r=>setTimeout(r,30));T.mapCreated=store.created;
         T.elev=demFromGrid(T.bbox,store.dem,atob);T.osmFailed=false;
         T.world=buildWorld(T,T.elev,osmFromStore(store),{cell:({laag:140,midden:95,hoog:55})[CONFIG.detail]||95,exaggeration:CONFIG.exaggeration,lineRaster,treeline:T.treeline||CONFIG.treeline});
+        T.apres=store.apres||[];
         makeGroup(T);addHouses(T,housesFromStore(T.world,store.houses,CONFIG.maxBuildings));T.state='ready';loadWeather(T);loadSnow(T);loadWebcams(T);
       }catch(e){console.error(e);T.state='error';setStep(T,show,'Kan '+T.kort+' niet bouwen',String(e&&e.message||e))}
       return;
@@ -309,6 +311,7 @@ function showScene(i){controls.returnNow();sceneEls.forEach(e=>e.classList.toggl
   segEls.forEach((e,k)=>{e.classList.toggle('on',k===i);e.classList.toggle('done',i>=0&&k<i);if(k>=i)e.querySelector('i').style.width='0'});
   const T=TRIPS[trip];if(i>=0&&T.world){const c=SCENE_CAM[i];orbitGoal.r=c.r*T.world.R*camZoom();orbitGoal.h=c.h*T.world.R*camZoom();focusGoal=sceneFocus(T.world,i)}}
 function swapTo(T){if(shown&&shown.group)shown.group.visible=false;shown=T;T.group.visible=true;fillTrip(T);applyTod();if(liveUI)liveUI.setTrip(T.id);
+  apres.set(T.world,T.apres);const na=apres.count();$('apresTile').hidden=!na;$('apresInfo').textContent=na?`${na} hutten, bars en kroegen op de kaart. Tik op een speldje voor meer.`:'';
   const w=T.world;scene.fog.near=w.R*1.6;scene.fog.far=w.R*7;stars.scale.setScalar(w.R*10);camera.near=w.R*.002;camera.far=w.R*30;camera.updateProjectionMatrix();
   camCams.forEach(c=>{c.near=w.R*.002;c.far=w.R*30;c.updateProjectionMatrix()});snMat.size=Math.max(4,w.R*.002);}
 async function goTrip(n){
@@ -390,6 +393,10 @@ new MutationObserver(queueTopbar).observe(topbar,{childList:true,subtree:true,ch
 addEventListener('resize',fit);document.addEventListener('visibilitychange',fit);fit();
 addEventListener('resize',queueTopbar);document.fonts&&document.fonts.ready.then(queueTopbar);queueTopbar();
 
+// ---------- après-ski pins (scene 'Sfeer nu'); the scene waits while one is open ----------
+let apresOpen=false;
+const apres=createApres($('apres'),o=>{apresOpen=o});
+
 // ---------- the map as a playing field (ski race, src/ski.ts) ----------
 let drive=null; // set by a game: (dt)=>{pos,look} steers the camera, the tour waits
 const map3d={scene,camera,
@@ -430,7 +437,7 @@ function frame(now){
       else{flight.t=.42;if(flight.T.state==='error'){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}}
     }
     if(flight&&flight.t>=1){flight=null;wolk.style.opacity=0;sc=firstScene();scT=0;showScene(sc);saveScenePin()}
-  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()&&!drive){scT+=dt;if(scT>=SCENE_DUR)next()}
+  } else if(!paused&&sc>=0&&scenePin===null&&!controls.holding()&&!drive&&!apresOpen){scT+=dt;if(scT>=SCENE_DUR)next()}
   if(sc>=0)segEls[sc].querySelector('i').style.width=(scenePin!==null?100:Math.min(100,scT/SCENE_DUR*100))+'%';
   const T=shown;if(!T||!T.world){return}
   const w=T.world,k=1-Math.exp(-dt*.6);
@@ -468,7 +475,8 @@ function frame(now){
       camCams[i].aspect=r.width/r.height;camCams[i].updateProjectionMatrix();renderer.render(scene,camCams[i])});renderer.setScissorTest(false)}
   const s=w.summit;v3.set(s[0],s[1]+w.R*.01,s[2]).project(camera);
   const mx=((v3.x+1)/2*VW-OX)/S,my=((1-v3.y)/2*VH-OY)/S,vis=v3.z<1&&!flight&&!dv&&sc!==2&&sc!==3&&(MOB?mx>150&&mx<DW-150&&my>(TRIPS.length>1?190:130)&&my<DH*.42:mx>200&&mx<DW-220&&my>180&&my<DH-200);
-  marker.style.left=mx+'px';marker.style.top=my+'px';marker.style.opacity=vis?1:0;
+  marker.style.left=mx+'px';marker.style.top=my+'px';marker.style.opacity=vis&&sc!==4?1:0;
+  apres.update(sc===4&&!flight&&!dv,(x,y,z)=>{v3.set(x,y,z).project(camera);return {x:((v3.x+1)/2*VW-OX)/S,y:((1-v3.y)/2*VH-OY)/S,ok:v3.z<1}},DW,DH);
 }
 requestAnimationFrame(frame);
 }
