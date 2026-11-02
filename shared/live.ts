@@ -1,10 +1,11 @@
-// Messages between the browser (src/live.ts) and a group's room (server/room.ts), as JSON over a WebSocket.
+// Messages between the browser (src/live.ts) and a trip's room (server/room.ts), as JSON over a WebSocket.
+// Who you are is not part of the messages: the server checks your session and tells the room.
 
 /** what someone is looking at right now */
 export interface Viewing {
-  /** area id of the trip on screen */
+  /** trip id on screen */
   trip: string | null;
-  /** false when the tab is in the background */
+  /** false when the tab is in the background, or this trip isn't the one on screen */
   visible: boolean;
 }
 
@@ -30,20 +31,20 @@ export interface ChatMessage {
 }
 
 export type ClientMsg =
-  | { t: 'hello'; id: string; naam: string; viewing: Viewing }
+  | { t: 'hello'; viewing: Viewing }
   | { t: 'view'; viewing: Viewing }
   | { t: 'msg'; text: string };
 
 export type ServerMsg =
-  | { t: 'state'; online: OnlineMember[]; members: Member[]; messages: ChatMessage[] }
+  | { t: 'state'; me: string; online: OnlineMember[]; members: Member[]; messages: ChatMessage[] }
   | { t: 'presence'; online: OnlineMember[]; members: Member[] }
   | { t: 'msg'; msg: ChatMessage }
   | { t: 'error'; error: string };
 
 /** room names: lowercase letters, digits and dashes */
 export const GROUP_RE = /^[a-z0-9-]{6,40}$/;
-/** everyone shares this room (the server supports more, should that ever be needed) */
-export const ROOM = 'pistenpuls';
+/** each trip has its own room */
+export const roomFor = (tripId: string) => 'trip-' + tripId;
 /** 'online geweest' = left within this window */
 export const RECENT_MS = 60 * 60_000;
 export const MAX_TEXT = 500;

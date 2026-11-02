@@ -1,12 +1,15 @@
-// One room per group: who is online, who was here when, and the messages.
+// One room per trip: who is online, who was here when, and the messages.
 // No platform code: cloudflare.ts (Durable Object) and node.ts (ws) provide the connections and the storage.
-import { HISTORY, MAX_NAME, MAX_TEXT, RECENT_MS, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live.ts';
+// Who someone is comes from the server (session checked before the connection reaches the room), never from the browser.
+import { HISTORY, MAX_TEXT, RECENT_MS, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live.ts';
 
-/** what a connection knows about its user once it said hello */
+/** what a connection knows about its user; set by the adapter when the connection is accepted */
 export interface ConnMeta {
   id: string;
   naam: string;
   viewing: Viewing;
+  /** said hello: gets updates and counts as online */
+  ready: boolean;
 }
 
 export interface Conn {
@@ -39,17 +42,16 @@ export class Room {
     let m: ClientMsg;
     try { m = JSON.parse(raw); } catch { return; }
     const me = conn.getMeta();
+    if (!me) return;
 
     if (m.t === 'hello') {
-      const id = clean(m.id, 40), naam = clean(m.naam, MAX_NAME);
-      if (!id || !naam) return this.send(conn, { t: 'error', error: 'naam en id zijn verplicht' });
-      conn.setMeta({ id, naam, viewing: this.viewing(m.viewing) });
-      this.host.storage.saveMember({ id, naam, lastSeen: Date.now() });
-      this.send(conn, { t: 'state', online: this.online(), members: this.host.storage.members(), messages: this.host.storage.messages(HISTORY) });
+      conn.setMeta({ ...me, viewing: this.viewing(m.viewing), ready: true });
+      this.host.storage.saveMember({ id: me.id, naam: me.naam, lastSeen: Date.now() });
+      this.send(conn, { t: 'state', me: me.id, online: this.online(), members: this.host.storage.members(), messages: this.host.storage.messages(HISTORY) });
       this.broadcastPresence();
       return;
     }
-    if (!me) return; // everything else needs a hello first
+    if (!me.ready) return; // everything else needs a hello first
 
     if (m.t === 'view') {
       conn.setMeta({ ...me, viewing: this.viewing(m.viewing) });
@@ -65,10 +67,15 @@ export class Room {
   /** call after the connection is gone (it must no longer be in connections()) */
   onClose(conn: Conn) {
     const me = conn.getMeta();
-    if (!me) return;
+    if (!me?.ready) return;
     // still online in another tab? then 'last seen' is now anyway, harmless
     this.host.storage.saveMember({ id: me.id, naam: me.naam, lastSeen: Date.now() });
     this.broadcastPresence();
+  }
+
+  /** who is connected right now (for the admin panel) */
+  presence() {
+    return this.online().map((o) => ({ id: o.id, naam: o.naam, visible: o.viewing.visible }));
   }
 
   private viewing(v: unknown): Viewing {
@@ -81,7 +88,7 @@ export class Room {
     const by = new Map<string, OnlineMember>();
     for (const c of this.host.connections()) {
       const m = c.getMeta();
-      if (!m) continue;
+      if (!m?.ready) continue;
       const prev = by.get(m.id);
       if (!prev || (!prev.viewing.visible && m.viewing.visible)) by.set(m.id, { id: m.id, naam: m.naam, viewing: m.viewing });
     }
@@ -94,7 +101,7 @@ export class Room {
 
   private broadcast(msg: ServerMsg) {
     const data = JSON.stringify(msg);
-    for (const c of this.host.connections()) if (c.getMeta()) try { c.send(data); } catch {}
+    for (const c of this.host.connections()) if (c.getMeta()?.ready) try { c.send(data); } catch {}
   }
 
   private send(conn: Conn, msg: ServerMsg) {

@@ -1,26 +1,56 @@
-// Cloudflare Workers: static files come from ./dist (wrangler.jsonc › assets); /api/live/<group> goes to that
-// group's Durable Object, everything else to the API.
+// Cloudflare Workers: static files come from ./dist (wrangler.jsonc › assets); /api/live/<trip> goes to that
+// trip's Durable Object (after checking the session and membership), everything else to the API.
 import { DurableObject } from 'cloudflare:workers';
-import { app, type Env as ApiEnv } from './app';
+import { createApp, sessionFromCookieHeader, type Env as ApiEnv } from './app';
+import { directory, type Db, type Directory } from './directory';
 import { Room, SCHEMA, sqlStorage, type Conn, type ConnMeta } from './room';
-import { GROUP_RE } from '../shared/live';
+import { roomFor } from '../shared/live';
 
 interface Env extends ApiEnv {
   ROOMS: DurableObjectNamespace<LiveRoom>;
+  DB: D1Database;
 }
 
+// one Directory per database binding and isolate (so the schema check runs once)
+const dirs = new WeakMap<D1Database, Directory>();
+function dir(env: Env) {
+  let d = dirs.get(env.DB);
+  if (!d) {
+    const db: Db = {
+      all: async (q, ...p) => (await env.DB.prepare(q).bind(...p).all()).results as any[],
+      run: async (q, ...p) => void (await env.DB.prepare(q).bind(...p).run()),
+    };
+    dirs.set(env.DB, (d = directory(db)));
+  }
+  return d;
+}
+
+const room = (env: Env, name: string) => env.ROOMS.get(env.ROOMS.idFromName(name), { locationHint: 'weur' });
+
+const app = createApp<Env>({
+  dir,
+  presence: async (env, name) => (await room(env, name).fetch('https://room/presence')).json(),
+});
+
 export default {
-  fetch(req, env, ctx) {
-    const m = new URL(req.url).pathname.match(/^\/api\/live\/([^/]+)$/);
+  async fetch(req, env, ctx) {
+    const m = new URL(req.url).pathname.match(/^\/api\/live\/([a-z0-9]{1,20})$/);
     if (m) {
-      if (!GROUP_RE.test(m[1])) return new Response('onbekende groep', { status: 404 });
-      return env.ROOMS.get(env.ROOMS.idFromName(m[1]), { locationHint: 'weur' }).fetch(req);
+      // only signed-in members of this trip get through; the room trusts the identity we pass on
+      const user = await dir(env).sessionUser(sessionFromCookieHeader(req.headers.get('Cookie')));
+      if (!user) return new Response('niet ingelogd', { status: 401 });
+      if (!(await dir(env).isMember(user.id, m[1]))) return new Response('geen lid van deze reis', { status: 403 });
+      ctx.waitUntil(dir(env).seen(user.id));
+      const headers = new Headers(req.headers);
+      headers.set('x-pp-id', user.id);
+      headers.set('x-pp-naam', encodeURIComponent(user.naam));
+      return room(env, roomFor(m[1])).fetch(new Request(req, { headers }));
     }
     return app.fetch(req, env, ctx);
   },
 } satisfies ExportedHandler<Env>;
 
-/** One instance per group. WebSocket hibernation: costs nothing while nobody sends anything. */
+/** One instance per trip. WebSocket hibernation: costs nothing while nobody sends anything. */
 export class LiveRoom extends DurableObject<Env> {
   private room: Room;
 
@@ -41,9 +71,13 @@ export class LiveRoom extends DurableObject<Env> {
   }
 
   async fetch(req: Request) {
+    if (new URL(req.url).pathname === '/presence') return Response.json(this.room.presence());
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket verwacht', { status: 426 });
+    const id = req.headers.get('x-pp-id'), naam = decodeURIComponent(req.headers.get('x-pp-naam') || '');
+    if (!id || !naam) return new Response('onbekende gebruiker', { status: 401 });
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ id, naam, viewing: { trip: null, visible: true }, ready: false } satisfies ConnMeta);
     return new Response(null, { status: 101, webSocket: client });
   }
 

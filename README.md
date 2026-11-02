@@ -32,16 +32,31 @@ tools/          add-area.ts
 public/         config.json (per deployment aan te passen)
 ```
 
-## Live: samen aftellen
+## Accounts en reizen
 
-Iedereen die Pistenpuls opent, zit in dezelfde groep (`ROOM` in `shared/live.ts`).
-Je ziet wie er nu meekijkt (topbalk, met de reis die ze bekijken), wie het laatste uur online was (`RECENT_MS`), en via de chatknop rechtsonder stuur je berichten.
-Er zijn geen accounts: iedereen met het adres kan meelezen en meepraten.
+Alleen uitgenodigde mensen komen erin. Iemand is een e-mailadres + naam; een reis is een gebied + voorgestelde datum + een groep mensen.
+Iedereen kiest zelf zijn aankomstdatum per reis (bij de eerste keer inloggen, later in menu › Instellingen).
+
+- **Inloggen** gaat met een persoonlijke link (`…/#invite=…`, 14 dagen geldig, werkt één keer). Daarna blijf je een jaar ingelogd (cookie).
+  Op een ander apparaat: menu › Instellingen › *Ander apparaat* geeft een link van 15 minuten.
+- **Beheer**: 5× snel op het logo klikken (alleen voor admins). Personen toevoegen, ze aan reizen koppelen, links maken, reizen aanmaken, wie er online is.
+- **De allereerste admin-link** maak je op de command line:
+  ```sh
+  npm run admin:invite -- --email jij@example.com --naam Jij --admin --target prod   # of preview / local
+  ```
+- Database: `users`, `trips`, `trip_members` (met ieders eigen aankomst), `invites`, `sessions` (`server/directory.ts`). Tokens staan alleen gehasht opgeslagen.
+  Op Cloudflare is dat D1 (`pistenpuls`, en `pistenpuls-preview` voor preview), te bekijken in het Cloudflare-dashboard. Op Node: `data/pistenpuls.db`.
+
+## Live: per reis
+
+Elke reis heeft een eigen kamer: wie er nu meekijkt (topbalk), wie het laatste uur online was, en de chat (rechtsonder).
+Je bent verbonden met al je reizen tegelijk: van de reis op het scherm krijg je meldingen, bij je andere reizen staat het aantal nieuwe berichten op de reispil.
+Wie je bent bepaalt de server (sessie + lidmaatschap worden gecontroleerd voordat de verbinding de kamer bereikt).
 
 - `shared/live.ts`: de berichten tussen browser en server
-- `server/room.ts`: de logica van een groep (platformloos)
-- Cloudflare: één Durable Object per groep, met eigen SQLite (`server/cloudflare.ts`)
-- Node: `ws` + een SQLite-bestand in `data/` (`server/node.ts`, Node 22.13 of nieuwer)
+- `server/room.ts`: de logica van een kamer (platformloos)
+- Cloudflare: één Durable Object per reis, met eigen SQLite (`server/cloudflare.ts`)
+- Node: `ws` + hetzelfde SQLite-bestand in `data/` (`server/node.ts`, Node 22.13 of nieuwer)
 
 ## Een skigebied toevoegen
 
@@ -61,11 +76,11 @@ Sneeuwhoogtes komen van avalanche.report: dat dekt Tirol, Zuid-Tirol, Trentino e
 |---|---|---|
 | Cloudflare | `npx wrangler login` (eenmalig), `npx wrangler secret put WINDY_KEY`, dan `npm run deploy` | ja |
 | Elke Node-host (VPS, Fly, Railway, Pi) | `npm run build`, dan `WINDY_KEY=... npm start` (poort via `PORT`) | ja |
-| Alleen statisch (GitHub Pages, Netlify) | `npm run build`, upload `dist/`, zet `"webcams": false` en `"live": false` in `dist/config.json` | nee |
+| Alleen statisch (GitHub Pages, Netlify) | `npm run build`, upload `dist/`, zet `"webcams": false` en `"live": false` in `dist/config.json`: dan geen accounts, reizen kies je in de browser | nee |
 
 ### Preview
 
 `npm run deploy:preview` zet de huidige code op een aparte Worker (`pistenpuls-preview`) met eigen live-data en een PREVIEW-label.
 Eerst daar testen, dan `npm run deploy` voor de echte versie. Webcams op preview: `npx wrangler secret put WINDY_KEY --env preview`.
 
-Draait de API op een ander adres dan de frontend, zet dat adres dan in `config.json` › `apiBase`.
+De API moet op hetzelfde adres draaien als de frontend (de inlogcookie is gebonden aan het adres).

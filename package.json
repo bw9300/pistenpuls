@@ -10,7 +10,8 @@
     "preview:cf": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
     "deploy:preview": "npm run build && wrangler deploy --env preview",
-    "area:add": "tsx tools/add-area.ts"
+    "area:add": "tsx tools/add-area.ts",
+    "admin:invite": "tsx tools/admin-invite.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.6",

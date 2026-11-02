@@ -7,19 +7,15 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { WebSocketServer, WebSocket } from 'ws';
-import { app as api, type Env } from './app';
+import { createApp, sessionFromCookieHeader, type Env } from './app';
+import { directory } from './directory';
 import { Room, SCHEMA, sqlStorage, type Conn, type ConnMeta } from './room';
-import { GROUP_RE } from '../shared/live';
+import { roomFor } from '../shared/live';
 
 const env: Env = { WINDY_KEY: process.env.WINDY_KEY };
 const port = Number(process.env.PORT) || 8787;
 
-const root = new Hono();
-root.all('/api/*', (c) => api.fetch(c.req.raw, env));
-root.use('/*', serveStatic({ root: './dist' }));
-const server = serve({ fetch: root.fetch, port }, () => console.log(`Pistenpuls op http://localhost:${port}`));
-
-// ---------- live ----------
+// ---------- one SQLite file for accounts and all rooms ----------
 const dataDir = process.env.DATA_DIR || 'data';
 fs.mkdirSync(dataDir, { recursive: true });
 const db = new DatabaseSync(path.join(dataDir, 'pistenpuls.db'));
@@ -28,7 +24,9 @@ const sql = {
   all: (q: string, ...p: any[]) => db.prepare(q).all(...p) as any[],
   run: (q: string, ...p: any[]) => void db.prepare(q).run(...p),
 };
+const dir = directory({ all: async (q, ...p) => sql.all(q, ...p), run: async (q, ...p) => sql.run(q, ...p) });
 
+// ---------- rooms (in memory while someone is connected) ----------
 const rooms = new Map<string, { room: Room; conns: Set<Conn & { ws: WebSocket }> }>();
 function getRoom(name: string) {
   let r = rooms.get(name);
@@ -40,13 +38,29 @@ function getRoom(name: string) {
   return r;
 }
 
+// ---------- http ----------
+const api = createApp<Env>({
+  dir: () => dir,
+  presence: async (_env, name) => rooms.get(name)?.room.presence() ?? [],
+});
+const root = new Hono();
+root.all('/api/*', (c) => api.fetch(c.req.raw, env));
+root.use('/*', serveStatic({ root: './dist' }));
+const server = serve({ fetch: root.fetch, port }, () => console.log(`Pistenpuls op http://localhost:${port}`));
+
+// ---------- live: only signed-in members of the trip get through ----------
 const wss = new WebSocketServer({ noServer: true });
-server.on('upgrade', (req, socket, head) => {
-  const m = (req.url || '').match(/^\/api\/live\/([^/?]+)/);
-  if (!m || !GROUP_RE.test(m[1])) return socket.destroy();
+server.on('upgrade', async (req, socket, head) => {
+  const m = (req.url || '').match(/^\/api\/live\/([a-z0-9]{1,20})(?:\?|$)/);
+  const deny = (code: number, text: string) => { socket.write(`HTTP/1.1 ${code} ${text}\r\n\r\n`); socket.destroy(); };
+  if (!m) return deny(404, 'Not Found');
+  const user = await dir.sessionUser(sessionFromCookieHeader(req.headers.cookie)).catch(() => null);
+  if (!user) return deny(401, 'Unauthorized');
+  if (!(await dir.isMember(user.id, m[1]))) return deny(403, 'Forbidden');
+  void dir.seen(user.id);
   wss.handleUpgrade(req, socket, head, (ws) => {
-    const r = getRoom(m[1]);
-    let meta: ConnMeta | null = null;
+    const name = roomFor(m[1]), r = getRoom(name);
+    let meta: ConnMeta | null = { id: user.id, naam: user.naam, viewing: { trip: null, visible: true }, ready: false };
     const conn = { ws, send: (d: string) => ws.send(d), getMeta: () => meta, setMeta: (x: ConnMeta) => { meta = x; } };
     r.conns.add(conn);
     ws.on('message', (data) => {
@@ -57,7 +71,7 @@ server.on('upgrade', (req, socket, head) => {
     ws.on('close', () => {
       r.conns.delete(conn);
       r.room.onClose(conn);
-      if (!r.conns.size) rooms.delete(m[1]);
+      if (!r.conns.size) rooms.delete(name);
     });
   });
 });

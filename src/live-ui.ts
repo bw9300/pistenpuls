@@ -1,7 +1,7 @@
-// Live in the dashboard: who's watching (top bar), the group panel with messages, and toasts for news.
-// Everyone who opens Pistenpuls is in the same group.
-import { RECENT_MS, ROOM, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
-import { AREAS } from './areas';
+// Live in the dashboard, per trip: who's watching (top bar), the panel with messages, toasts for news.
+// Connected to all my trips at once: the trip on screen gets the panel and toasts, the others count unread messages
+// (badge on their trip pill).
+import { RECENT_MS, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
 import { connectLive, type Live, type LiveEvent } from './live';
 import { esc } from './settings';
 
@@ -10,7 +10,6 @@ const COLORS = ['#E0533D', '#F0B45A', '#5B9BD5', '#7FB77E', '#B08BD9', '#E58FB1'
 const color = (id: string) => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; };
 const initial = (naam: string) => esc((naam.trim()[0] || '?').toUpperCase());
 const avatar = (id: string, naam: string, dim = false) => `<i class="av${dim ? ' dim' : ''}" style="--c:${color(id)}" aria-hidden="true">${initial(naam)}</i>`;
-const tripName = (id: string | null) => (id && AREAS.find((a) => a.id === id)?.kort) || '';
 const time = (ts: number) => new Date(ts).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
 function ago(ts: number) {
@@ -27,9 +26,21 @@ function day(ts: number) {
   return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-export function startLiveUI(opts: { apiBase: string; naam: string; trip: string | null }) {
+// what I've read per trip (highest message id), kept in this browser
+const readKey = (trip: string) => 'pp-read-' + trip;
+const getRead = (trip: string) => { try { const v = localStorage.getItem(readKey(trip)); return v === null ? null : Number(v); } catch { return null; } };
+const setRead = (trip: string, id: number) => { try { localStorage.setItem(readKey(trip), String(id)); } catch {} };
+
+export function startLiveUI(opts: {
+  apiBase: string;
+  trips: { id: string; naam: string }[];
+  active: string | null;
+  /** unread messages of a trip changed (for the badge on its pill) */
+  onUnread: (trip: string, n: number) => void;
+}) {
   const btn = $('chatBtn'), panel = $('chat'), who = $('who');
-  let trip = opts.trip, unread = 0, open = false;
+  const tripName = (id: string | null) => opts.trips.find((t) => t.id === id)?.naam || '';
+  let active = opts.active, open = false;
 
   // ---------- panel open/close (same behaviour as the menu) ----------
   function setOpen(o: boolean) {
@@ -37,92 +48,117 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
     panel.hidden = !o;
     btn.setAttribute('aria-expanded', String(o));
     document.body.classList.toggle('chatopen', o);
-    if (o) { unread = 0; renderBadge(); render(); scrollDown(); setTimeout(() => (panel.querySelector('#chatText') as HTMLInputElement | null)?.focus(), 30); }
+    if (o) { markRead(); render(); scrollDown(); setTimeout(() => (panel.querySelector('#chatText') as HTMLInputElement | null)?.focus(), 30); }
   }
   btn.onclick = () => setOpen(!open);
   who.onclick = () => setOpen(true);
   addEventListener('pointerdown', (e) => { if (open && !panel.contains(e.target as Node) && !btn.contains(e.target as Node) && !who.contains(e.target as Node)) setOpen(false); });
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); btn.focus(); } });
 
-  // ---------- connection: everyone in the same room ----------
-  const live: Live = connectLive({ apiBase: opts.apiBase, room: ROOM, naam: opts.naam, trip, onEvent });
+  // ---------- one connection per trip ----------
+  const lives = new Map<string, Live>();
+  for (const t of opts.trips) lives.set(t.id, connectLive({ apiBase: opts.apiBase, trip: t.id, active, onEvent: (e) => onEvent(t.id, e) }));
+  const cur = () => (active ? lives.get(active) : undefined);
 
-  function onEvent(e: LiveEvent) {
+  function unread(trip: string) {
+    const l = lives.get(trip);
+    if (!l || l.state.status === 'connecting' && !l.state.messages.length) return 0;
+    const r = getRead(trip) ?? 0;
+    return l.state.messages.filter((m) => m.id > r && m.from !== l.state.me).length;
+  }
+  function markRead() {
+    const l = cur();
+    if (!l) return;
+    const last = l.state.messages[l.state.messages.length - 1];
+    if (last) setRead(l.trip, last.id);
+    renderBadges();
+  }
+  function renderBadges() {
+    for (const t of opts.trips) opts.onUnread(t.id, t.id === active ? 0 : unread(t.id));
+    const n = active && !open ? unread(active) : 0;
+    btn.classList.toggle('unread', n > 0);
+    $('chatBadge').textContent = n > 9 ? '9+' : String(n);
+    btn.setAttribute('aria-label', n ? `Groep openen, ${n} ${n === 1 ? 'nieuw bericht' : 'nieuwe berichten'}` : 'Groep openen');
+  }
+
+  function onEvent(trip: string, e: LiveEvent) {
+    const l = lives.get(trip)!;
+    if (e.t === 'state' && getRead(trip) === null) {
+      // first time on this device: the history so far doesn't count as new
+      const last = l.state.messages[l.state.messages.length - 1];
+      setRead(trip, last ? last.id : 0);
+    }
+    const isActive = trip === active;
     if (e.t === 'msg') {
-      if (e.msg.from !== live.me && !open) {
-        unread++;
-        renderBadge();
-        toast(`${avatar(e.msg.from, e.msg.naam)}<span><b>${esc(e.msg.naam)}</b> ${esc(e.msg.text)}</span>`, 9000);
-      }
-      if (open) { appendMessage(e.msg); scrollDown(); }
+      if (isActive && open) { appendMessage(e.msg); scrollDown(); markRead(); }
+      else if (isActive && e.msg.from !== l.state.me) toast(`${avatar(e.msg.from, e.msg.naam)}<span><b>${esc(e.msg.naam)}</b> ${esc(e.msg.text)}</span>`, 9000);
+      if (e.msg.from === l.state.me && isActive) markRead();
+      renderBadges();
       return;
     }
-    if (e.t === 'presence') for (const j of e.joined) toast(`${avatar(j.id, j.naam)}<span><b>${esc(j.naam)}</b> kijkt nu mee</span>`, 5000);
-    render();
+    if (e.t === 'presence' && isActive) for (const j of e.joined) toast(`${avatar(j.id, j.naam)}<span><b>${esc(j.naam)}</b> kijkt nu mee</span>`, 5000);
+    renderBadges();
+    if (isActive) render();
   }
 
-  // ---------- rendering ----------
+  // ---------- rendering (the trip on screen) ----------
   /** left within the last hour and not online now */
-  const recent = (): Member[] => {
-    const onlineIds = new Set(live.state.online.map((o) => o.id));
-    return live.state.members.filter((m) => !onlineIds.has(m.id) && Date.now() - m.lastSeen < RECENT_MS);
+  const recent = (l: Live): Member[] => {
+    const onlineIds = new Set(l.state.online.map((o) => o.id));
+    return l.state.members.filter((m) => !onlineIds.has(m.id) && Date.now() - m.lastSeen < RECENT_MS);
   };
+  const viewingText = (o: OnlineMember) => !o.viewing.visible ? (o.viewing.trip && o.viewing.trip !== active ? 'kijkt naar een andere reis' : 'op de achtergrond') : 'kijkt mee';
 
   function renderWho() {
-    const s = live.state;
-    if (s.status !== 'online') { who.hidden = true; return; }
-    const others = s.online.filter((o) => o.id !== live.me);
-    const list = [s.online.find((o) => o.id === live.me), ...others].filter(Boolean) as OnlineMember[];
-    const rec = recent();
+    const l = cur();
+    if (!l || l.state.status !== 'online') { who.hidden = true; return; }
+    const s = l.state, others = s.online.filter((o) => o.id !== s.me);
+    const list = [s.online.find((o) => o.id === s.me), ...others].filter(Boolean) as OnlineMember[];
+    const rec = recent(l);
     who.hidden = false;
-    who.title = list.map((o) => o.naam + (o.viewing.trip ? ` · ${tripName(o.viewing.trip)}` : '')).join('\n')
-      + (rec.length ? `\n\nLaatste uur: ${rec.map((m) => m.naam).join(', ')}` : '');
+    who.title = list.map((o) => o.naam + (o.viewing.visible ? '' : ` (${viewingText(o)})`)).join('\n') + (rec.length ? `\n\nLaatste uur: ${rec.map((m) => m.naam).join(', ')}` : '');
     who.innerHTML = `<span class="avs">${list.slice(0, 3).map((o) => avatar(o.id, o.naam, !o.viewing.visible)).join('')}</span>`
       + (list.length > 3 ? `<em>+${list.length - 3}</em>` : '')
-      + `<span class="wlbl">${others.length ? `${others.length + 1} kijken mee` : 'alleen jij'}</span>`;
+      + `<span class="wlbl">${others.length ? `${others.length + 1} online` : 'alleen jij'}</span>`;
   }
 
-  function renderBadge() {
-    btn.classList.toggle('unread', unread > 0);
-    $('chatBadge').textContent = unread > 9 ? '9+' : String(unread);
-    btn.setAttribute('aria-label', unread ? `Groep openen, ${unread} ${unread === 1 ? 'nieuw bericht' : 'nieuwe berichten'}` : 'Groep openen');
-  }
-
-  const msgHTML = (m: ChatMessage, prev?: ChatMessage) => {
-    const mine = m.from === live.me, sameDay = prev && day(prev.ts) === day(m.ts);
+  const msgHTML = (me: string, m: ChatMessage, prev?: ChatMessage) => {
+    const mine = m.from === me, sameDay = prev && day(prev.ts) === day(m.ts);
     const grouped = sameDay && prev!.from === m.from && m.ts - prev!.ts < 5 * 60_000;
     return (sameDay ? '' : `<li class="day">${day(m.ts)}</li>`)
       + `<li class="m${mine ? ' mine' : ''}${grouped ? ' cont' : ''}">${grouped || mine ? '' : avatar(m.from, m.naam)}<div>${grouped || mine ? '' : `<b>${esc(m.naam)}</b>`}<p>${esc(m.text)}</p><time>${time(m.ts)}</time></div></li>`;
   };
   function appendMessage(m: ChatMessage) {
-    const list = panel.querySelector('#chatMsgs');
-    if (!list) return;
+    const list = panel.querySelector('#chatMsgs'), l = cur();
+    if (!list || !l) return;
     list.querySelector('.empty')?.remove();
-    const msgs = live.state.messages;
-    list.insertAdjacentHTML('beforeend', msgHTML(m, msgs[msgs.length - 2]));
+    const msgs = l.state.messages;
+    list.insertAdjacentHTML('beforeend', msgHTML(l.state.me, m, msgs[msgs.length - 2]));
   }
   const scrollDown = () => { const l = panel.querySelector('#chatMsgs'); if (l) l.scrollTop = l.scrollHeight; };
 
   function render() {
     renderWho();
     if (!open) return;
+    const l = cur();
+    if (!l) { panel.innerHTML = '<p class="msrc">Geen reis gekozen.</p>'; return; }
     // keep what's being typed across re-renders
     const prevInput = panel.querySelector('#chatText') as HTMLInputElement | null, typed = prevInput?.value || '', focused = document.activeElement === prevInput;
-    const s = live.state;
+    const s = l.state;
     const status = s.status === 'online' ? '' : s.status === 'connecting' ? 'Verbinden…' : 'Geen verbinding, opnieuw proberen…';
-    const people = s.online.map((o) => `<li>${avatar(o.id, o.naam, !o.viewing.visible)}<span><b>${esc(o.naam)}${o.id === live.me ? ' (jij)' : ''}</b><small>${o.viewing.visible ? (o.viewing.trip ? 'kijkt naar ' + esc(tripName(o.viewing.trip)) : 'online') : 'op de achtergrond'}</small></span></li>`).join('');
-    const rec = recent().map((m) => `<li>${avatar(m.id, m.naam, true)}<span><b>${esc(m.naam)}</b><small>${ago(m.lastSeen)}</small></span></li>`).join('');
+    const people = s.online.map((o) => `<li>${avatar(o.id, o.naam, !o.viewing.visible)}<span><b>${esc(o.naam)}${o.id === s.me ? ' (jij)' : ''}</b><small>${viewingText(o)}</small></span></li>`).join('');
+    const rec = recent(l).map((m) => `<li>${avatar(m.id, m.naam, true)}<span><b>${esc(m.naam)}</b><small>${ago(m.lastSeen)}</small></span></li>`).join('');
     panel.innerHTML = `
-      <div class="chead"><h4>Nu online</h4>${status ? `<span class="cstatus">${status}</span>` : ''}</div>
+      <div class="chead"><h4>${esc(tripName(active))} · nu online</h4>${status ? `<span class="cstatus">${status}</span>` : ''}</div>
       <ul class="people">${people}</ul>
       ${rec ? `<h4>Laatste uur online</h4><ul class="people">${rec}</ul>` : ''}
-      <ul class="msgs" id="chatMsgs">${s.messages.map((m, i) => msgHTML(m, s.messages[i - 1])).join('') || '<li class="empty">Nog geen berichten. Zeg eens hallo!</li>'}</ul>
-      <form class="csend" id="chatForm"><label class="vh" for="chatText">Bericht</label><input id="chatText" maxlength="500" autocomplete="off" placeholder="Bericht aan iedereen"><button type="submit" class="primary">Stuur</button></form>`;
+      <ul class="msgs" id="chatMsgs">${s.messages.map((m, i) => msgHTML(s.me, m, s.messages[i - 1])).join('') || '<li class="empty">Nog geen berichten. Zeg eens hallo!</li>'}</ul>
+      <form class="csend" id="chatForm"><label class="vh" for="chatText">Bericht</label><input id="chatText" maxlength="500" autocomplete="off" placeholder="Bericht aan ${esc(tripName(active))}"><button type="submit" class="primary">Stuur</button></form>`;
     ($('chatForm') as HTMLFormElement).onsubmit = (e) => {
       e.preventDefault();
       const inp = $('chatText') as HTMLInputElement, text = inp.value.trim();
-      if (!text || live.state.status !== 'online') return;
-      live.say(text);
+      if (!text || l.state.status !== 'online') return;
+      l.say(text);
       inp.value = '';
     };
     const inp = $('chatText') as HTMLInputElement;
@@ -143,10 +179,17 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
   }
 
   // 'x min geleden' and the one-hour window move on with time
-  setInterval(render, 60_000);
+  setInterval(() => { if (open) render(); else renderWho(); }, 60_000);
 
   render();
   return {
-    setTrip(t: string | null) { trip = t; live.setTrip(t); },
+    /** the trip on screen changed */
+    setTrip(t: string | null) {
+      active = t;
+      for (const l of lives.values()) l.setActive(t);
+      if (open) markRead();
+      renderBadges();
+      render();
+    },
   };
 }

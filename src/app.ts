@@ -7,13 +7,19 @@ import {PI,hash2,buildWorld,buildHouses,demFromGrid,osmFromStore,housesFromStore
 import {loadTerrain,loadOsm,lineRaster,WX,fetchWeather,fetchSnow,fetchWebcams,fetchMap} from './data';
 import {STORE,esc,tripPickerHTML,wirePicker,readPicker,startWizard} from './settings';
 import {startLiveUI} from './live-ui';
+import {renderSettings} from './account';
 import {createControls} from './controls';
 
-export function startApp(RT){
-const SETTINGS=STORE.get();
-const TRIPS=((SETTINGS&&SETTINGS.reizen)||[]).map(r=>{const c=AREAS.find(t=>t.id===r.id);return c&&/^\d{4}-\d{2}-\d{2}$/.test(r.aankomst)?Object.assign({},c,{van:r.aankomst}):null}).filter(Boolean).sort((a,b)=>a.van<b.van?-1:a.van>b.van?1:0);
-if(!TRIPS.length){startWizard();return}
-const NAAM=String(SETTINGS.naam||'').trim();
+// ME: the signed-in account (server with live), or null when hosted statically (trips chosen in this browser)
+export function startApp(RT,ME){
+const SETTINGS=ME?null:STORE.get();
+const byDate=(a,b)=>a.van<b.van?-1:a.van>b.van?1:0;
+// a trip = an area plus its own id, name (pill label) and my arrival date
+const TRIPS=ME
+  ?ME.trips.map(t=>{const a=AREAS.find(x=>x.id===t.area);return a?Object.assign({},a,{id:t.id,area:a.id,kort:t.naam,van:t.aankomst||t.aankomstReis}):null}).filter(Boolean).sort(byDate)
+  :((SETTINGS&&SETTINGS.reizen)||[]).map(r=>{const c=AREAS.find(t=>t.id===r.id);return c&&/^\d{4}-\d{2}-\d{2}$/.test(r.aankomst)?Object.assign({},c,{area:c.id,van:r.aankomst}):null}).filter(Boolean).sort(byDate);
+if(!TRIPS.length){if(!ME)startWizard();return}
+const NAAM=String(ME?ME.user.naam:SETTINGS.naam||'').trim();
 const SCENES=['Aftellen','Sneeuw & weer',RT.webcams?'Webcams':'Uitzicht','Pistekaart','Sfeer nu'];
 const SCENE_DUR=CONFIG.sceneSeconds, FLIGHT_DUR=6.5;
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -211,7 +217,7 @@ const fmtDay=new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',mont
 const fmtDate=new Intl.DateTimeFormat('nl-NL',{weekday:'long',day:'numeric',month:'long'});
 const D=iso=>new Date(iso+'T00:00:00');
 const nl=n=>Math.round(n).toLocaleString('nl-NL');
-$('tabs').innerHTML=TRIPS.map((t,i)=>`<button type="button" data-trip="${i}" aria-pressed="false"><span class="tnum">${i+1} ·</span>${esc(t.kort)}<svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`).join('');
+$('tabs').innerHTML=TRIPS.map((t,i)=>`<button type="button" data-trip="${i}" aria-pressed="false"><span class="tnum">${i+1} ·</span>${esc(t.kort)}<b class="tbadge" hidden></b><svg class="pinic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1.5h6l-1 4 3 3H3l3-3z" fill="currentColor"/><path d="M8 8.5v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`).join('');
 $('segs').innerHTML=SCENES.map((s,i)=>`<button type="button" class="seg" data-seg="${i}" aria-label="Ga naar ${s}"><div>${s}</div><div class="tr"><i></i></div></button>`).join('');
 const segEls=[...document.querySelectorAll('.seg')],sceneEls=[...document.querySelectorAll('.scene')],tabEls=[...$('tabs').children];
 const greetWord=()=>{const h=new Date().getHours();return h<6?'Goedenacht':h<12?'Goedemorgen':h<18?'Goedemiddag':'Goedenavond'};
@@ -333,12 +339,15 @@ const tabs=[[$('tabCtl'),$('panCtl')],[$('tabSet'),$('panSet')]];
 function selTab(i){tabs.forEach(([t,p],k)=>{t.setAttribute('aria-selected',k===i);t.tabIndex=k===i?0:-1;p.hidden=k!==i});clearTimeout(menuT);if(i===0)menuT=setTimeout(()=>setMenu(false),30000)}
 tabs.forEach(([t],i)=>{t.onclick=()=>selTab(i);t.onkeydown=e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const j=(i+1)%2;selTab(j);tabs[j][0].focus()}}});
 // settings tab
+if(ME)renderSettings(ME);
+else{
 $('sName').value=NAAM;$('sTrips').innerHTML=tripPickerHTML('s',SETTINGS.reizen||[]);wirePicker($('sTrips'));
 $('panSet').onsubmit=e=>{e.preventDefault();const reizen=readPicker($('sTrips'));
   if(!reizen.length){$('sErr').textContent='Kies minstens één reis.';return}
   if(reizen.some(r=>!/^\d{4}-\d{2}-\d{2}$/.test(r.aankomst))){$('sErr').textContent='Vul bij elke gekozen reis een aankomstdatum in.';return}
   STORE.set({naam:$('sName').value.trim(),reizen});location.reload()};
 $('sReset').onclick=()=>{STORE.clear();location.reload()};
+}
 menu.addEventListener('input',()=>clearTimeout(menuT));
 function fillMapInfo(T){$('mapInfo').textContent=T.mapCreated?`Kaartdata ${T.kort} opgeslagen op ${new Date(T.mapCreated).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})} · © OpenStreetMap-bijdragers`:'Kaartdata wordt live opgehaald · © OpenStreetMap-bijdragers'}
 function lock(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}lock();document.addEventListener('visibilitychange',()=>{if(!document.hidden)lock()});
@@ -364,8 +373,9 @@ function fit(){VW=innerWidth;VH=innerHeight;
 addEventListener('resize',fit);document.addEventListener('visibilitychange',fit);fit();
 
 // ---------- start ----------
-const liveUI=RT.live?startLiveUI({apiBase:RT.apiBase,naam:NAAM,trip:null}):null;
-$('chatBtn').hidden=!RT.live;
+const liveUI=ME?startLiveUI({apiBase:RT.apiBase,trips:TRIPS.map(t=>({id:t.id,naam:t.kort})),active:null,
+  onUnread:(id,n)=>{const i=TRIPS.findIndex(t=>t.id===id),b=i>=0&&tabEls[i].querySelector('.tbadge');if(b){b.hidden=!n;b.textContent=n>9?'9+':String(n);tabEls[i].setAttribute('aria-label',TRIPS[i].kort+(n?`, ${n} ${n===1?'nieuw bericht':'nieuwe berichten'}`:''))}}}):null;
+$('chatBtn').hidden=!ME;
 showScene(-2);tickClock();setInterval(tickClock,1000);
 setInterval(()=>TRIPS.forEach(T=>{if(T.state==='ready')loadWeather(T)}),30*60*1000);
 setInterval(()=>TRIPS.forEach(T=>{if(T.state==='ready')loadSnow(T)}),10*60*1000);
