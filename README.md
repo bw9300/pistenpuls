@@ -34,9 +34,9 @@ public/         config.json (per deployment aan te passen)
 
 ## Live: samen aftellen
 
-Via de chatknop rechtsonder maak je een groep. Deel de uitnodigingslink (`…/#groep=sneeuw-…`): wie hem opent, doet mee.
-Je ziet wie er nu meekijkt (topbalk, met de reis die ze bekijken), wie eerder online was, en je kunt berichten sturen.
-Er zijn geen accounts: de groepscode is de sleutel, dus deel de link alleen met de groep.
+Iedereen die Pistenpuls opent, zit in dezelfde groep (`ROOM` in `shared/live.ts`).
+Je ziet wie er nu meekijkt (topbalk, met de reis die ze bekijken), wie het laatste uur online was (`RECENT_MS`), en via de chatknop rechtsonder stuur je berichten.
+Er zijn geen accounts: iedereen met het adres kan meelezen en meepraten.
 
 - `shared/live.ts`: de berichten tussen browser en server
 - `server/room.ts`: de logica van een groep (platformloos)

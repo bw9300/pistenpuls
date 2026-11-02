@@ -1,6 +1,6 @@
 // One room per group: who is online, who was here when, and the messages.
 // No platform code: cloudflare.ts (Durable Object) and node.ts (ws) provide the connections and the storage.
-import { HISTORY, MAX_NAME, MAX_TEXT, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live.ts';
+import { HISTORY, MAX_NAME, MAX_TEXT, RECENT_MS, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live.ts';
 
 /** what a connection knows about its user once it said hello */
 export interface ConnMeta {
@@ -17,6 +17,7 @@ export interface Conn {
 
 /** synchronous on purpose: both SQLite in a Durable Object and node:sqlite are */
 export interface RoomStorage {
+  /** members seen within RECENT_MS (online ones included) */
   members(): Member[];
   saveMember(m: Member): void;
   messages(limit: number): ChatMessage[];
@@ -112,7 +113,7 @@ export const SCHEMA = [
 export function sqlStorage(room: string, sql: { all(q: string, ...p: unknown[]): any[]; run(q: string, ...p: unknown[]): void }): RoomStorage {
   return {
     members: () =>
-      sql.all('SELECT id, naam, last_seen FROM members WHERE room = ? ORDER BY last_seen DESC', room)
+      sql.all('SELECT id, naam, last_seen FROM members WHERE room = ? AND last_seen > ? ORDER BY last_seen DESC', room, Date.now() - RECENT_MS)
         .map((r) => ({ id: r.id, naam: r.naam, lastSeen: Number(r.last_seen) })),
     saveMember: (m) =>
       sql.run('INSERT INTO members (room, id, naam, last_seen) VALUES (?, ?, ?, ?) ON CONFLICT (room, id) DO UPDATE SET naam = excluded.naam, last_seen = excluded.last_seen', room, m.id, m.naam, m.lastSeen),

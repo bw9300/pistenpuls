@@ -1,5 +1,5 @@
 // Connection to the group's room: who is online, who was here, messages. Reconnects by itself.
-import { GROUP_RE, type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live';
+import { type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live';
 
 export type LiveStatus = 'connecting' | 'online' | 'offline';
 
@@ -24,7 +24,7 @@ export interface Live {
   close(): void;
 }
 
-// ---------- identity and group (this browser) ----------
+// ---------- identity (this browser) ----------
 export function deviceId(): string {
   try {
     let id = localStorage.getItem('pp-id');
@@ -35,47 +35,14 @@ export function deviceId(): string {
   }
 }
 
-export function getGroup(): string | null {
-  try {
-    const g = localStorage.getItem('pp-groep');
-    return g && GROUP_RE.test(g) ? g : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setGroup(g: string | null) {
-  try {
-    if (g) localStorage.setItem('pp-groep', g);
-    else localStorage.removeItem('pp-groep');
-  } catch {}
-}
-
-export function newGroupCode(): string {
-  const a = new Uint8Array(8);
-  crypto.getRandomValues(a);
-  return 'sneeuw-' + [...a].map((b) => '0123456789abcdefghijklmnopqrstuvwxyz'[b % 36]).join('');
-}
-
-/** an invite link (…#groep=code) opened in this browser: remember the group, tidy the address bar */
-export function takeGroupFromLink() {
-  const m = location.hash.match(/groep=([a-z0-9-]+)/);
-  if (m && GROUP_RE.test(m[1])) {
-    setGroup(m[1]);
-    history.replaceState(null, '', location.pathname + location.search);
-  }
-}
-
-export const inviteLink = (g: string) => `${location.origin}${location.pathname}#groep=${g}`;
-
 // ---------- connection ----------
-export function connectLive(opts: { apiBase: string; group: string; naam: string; trip: string | null; onEvent: (e: LiveEvent) => void }): Live {
+export function connectLive(opts: { apiBase: string; room: string; naam: string; trip: string | null; onEvent: (e: LiveEvent) => void }): Live {
   const me = deviceId();
   const state: LiveState = { status: 'connecting', online: [], members: [], messages: [] };
   let trip = opts.trip, ws: WebSocket | null = null, retry = 0, closed = false, pingT = 0, retryT = 0;
 
   const base = opts.apiBase || location.origin;
-  const url = base.replace(/^http/, 'ws') + '/api/live/' + opts.group;
+  const url = base.replace(/^http/, 'ws') + '/api/live/' + opts.room;
   const viewing = (): Viewing => ({ trip, visible: !document.hidden });
   const send = (m: ClientMsg) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
   const setStatus = (s: LiveStatus) => { if (state.status !== s) { state.status = s; opts.onEvent({ t: 'status' }); } };

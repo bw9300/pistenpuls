@@ -1,7 +1,8 @@
 // Live in the dashboard: who's watching (top bar), the group panel with messages, and toasts for news.
-import type { ChatMessage, Member, OnlineMember } from '../shared/live';
+// Everyone who opens Pistenpuls is in the same group.
+import { RECENT_MS, ROOM, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
 import { AREAS } from './areas';
-import { connectLive, getGroup, inviteLink, newGroupCode, setGroup, takeGroupFromLink, type Live } from './live';
+import { connectLive, type Live, type LiveEvent } from './live';
 import { esc } from './settings';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -15,10 +16,7 @@ const time = (ts: number) => new Date(ts).toLocaleTimeString('nl-NL', { hour: '2
 function ago(ts: number) {
   const s = (Date.now() - ts) / 1000;
   if (s < 90) return 'net';
-  if (s < 3600) return `${Math.round(s / 60)} min geleden`;
-  if (s < 86400) return `${Math.round(s / 3600)} uur geleden`;
-  const d = Math.round(s / 86400);
-  return d === 1 ? 'gisteren' : `${d} dagen geleden`;
+  return `${Math.round(s / 60)} min geleden`;
 }
 
 function day(ts: number) {
@@ -30,9 +28,8 @@ function day(ts: number) {
 }
 
 export function startLiveUI(opts: { apiBase: string; naam: string; trip: string | null }) {
-  takeGroupFromLink();
   const btn = $('chatBtn'), panel = $('chat'), who = $('who');
-  let live: Live | null = null, trip = opts.trip, unread = 0, open = false;
+  let trip = opts.trip, unread = 0, open = false;
 
   // ---------- panel open/close (same behaviour as the menu) ----------
   function setOpen(o: boolean) {
@@ -47,19 +44,15 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
   addEventListener('pointerdown', (e) => { if (open && !panel.contains(e.target as Node) && !btn.contains(e.target as Node) && !who.contains(e.target as Node)) setOpen(false); });
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); btn.focus(); } });
 
-  // ---------- connection ----------
-  function connect() {
-    live?.close();
-    live = null;
-    const group = getGroup();
-    if (group) live = connectLive({ apiBase: opts.apiBase, group, naam: opts.naam, trip, onEvent });
-    render();
-  }
+  // ---------- connection: everyone in the same room ----------
+  const live: Live = connectLive({ apiBase: opts.apiBase, room: ROOM, naam: opts.naam, trip, onEvent });
 
-  function onEvent(e: Parameters<Parameters<typeof connectLive>[0]['onEvent']>[0]) {
+  function onEvent(e: LiveEvent) {
     if (e.t === 'msg') {
-      if (e.msg.from !== live?.me) {
-        if (!open) { unread++; renderBadge(); toast(`${avatar(e.msg.from, e.msg.naam)}<span><b>${esc(e.msg.naam)}</b> ${esc(e.msg.text)}</span>`, 9000); }
+      if (e.msg.from !== live.me && !open) {
+        unread++;
+        renderBadge();
+        toast(`${avatar(e.msg.from, e.msg.naam)}<span><b>${esc(e.msg.naam)}</b> ${esc(e.msg.text)}</span>`, 9000);
       }
       if (open) { appendMessage(e.msg); scrollDown(); }
       return;
@@ -69,13 +62,21 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
   }
 
   // ---------- rendering ----------
+  /** left within the last hour and not online now */
+  const recent = (): Member[] => {
+    const onlineIds = new Set(live.state.online.map((o) => o.id));
+    return live.state.members.filter((m) => !onlineIds.has(m.id) && Date.now() - m.lastSeen < RECENT_MS);
+  };
+
   function renderWho() {
-    const s = live?.state;
-    if (!s || s.status !== 'online') { who.hidden = true; return; }
-    const others = s.online.filter((o) => o.id !== live!.me);
-    const list = [s.online.find((o) => o.id === live!.me), ...others].filter(Boolean) as OnlineMember[];
+    const s = live.state;
+    if (s.status !== 'online') { who.hidden = true; return; }
+    const others = s.online.filter((o) => o.id !== live.me);
+    const list = [s.online.find((o) => o.id === live.me), ...others].filter(Boolean) as OnlineMember[];
+    const rec = recent();
     who.hidden = false;
-    who.title = list.map((o) => o.naam + (o.viewing.trip ? ` · ${tripName(o.viewing.trip)}` : '')).join('\n');
+    who.title = list.map((o) => o.naam + (o.viewing.trip ? ` · ${tripName(o.viewing.trip)}` : '')).join('\n')
+      + (rec.length ? `\n\nLaatste uur: ${rec.map((m) => m.naam).join(', ')}` : '');
     who.innerHTML = `<span class="avs">${list.slice(0, 5).map((o) => avatar(o.id, o.naam, !o.viewing.visible)).join('')}</span>`
       + (list.length > 5 ? `<em>+${list.length - 5}</em>` : '')
       + `<span>${others.length ? `${others.length + 1} kijken mee` : 'alleen jij'}</span>`;
@@ -88,14 +89,14 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
   }
 
   const msgHTML = (m: ChatMessage, prev?: ChatMessage) => {
-    const mine = m.from === live?.me, sameDay = prev && day(prev.ts) === day(m.ts);
+    const mine = m.from === live.me, sameDay = prev && day(prev.ts) === day(m.ts);
     const grouped = sameDay && prev!.from === m.from && m.ts - prev!.ts < 5 * 60_000;
     return (sameDay ? '' : `<li class="day">${day(m.ts)}</li>`)
       + `<li class="m${mine ? ' mine' : ''}${grouped ? ' cont' : ''}">${grouped || mine ? '' : avatar(m.from, m.naam)}<div>${grouped || mine ? '' : `<b>${esc(m.naam)}</b>`}<p>${esc(m.text)}</p><time>${time(m.ts)}</time></div></li>`;
   };
   function appendMessage(m: ChatMessage) {
     const list = panel.querySelector('#chatMsgs');
-    if (!list || !live) return;
+    if (!list) return;
     list.querySelector('.empty')?.remove();
     const msgs = live.state.messages;
     list.insertAdjacentHTML('beforeend', msgHTML(m, msgs[msgs.length - 2]));
@@ -105,61 +106,29 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
   function render() {
     renderWho();
     if (!open) return;
-    const group = getGroup();
-    if (!group || !live) { renderJoin(); return; }
-    // keep what's being typed and the open state of 'Leden' across re-renders
+    // keep what's being typed across re-renders
     const prevInput = panel.querySelector('#chatText') as HTMLInputElement | null, typed = prevInput?.value || '', focused = document.activeElement === prevInput;
-    const moreOpen = (panel.querySelector('.cmore') as HTMLDetailsElement | null)?.open || false;
-    const s = live.state, onlineIds = new Set(s.online.map((o) => o.id));
+    const s = live.state;
     const status = s.status === 'online' ? '' : s.status === 'connecting' ? 'Verbinden…' : 'Geen verbinding, opnieuw proberen…';
-    const people = s.online.map((o) => `<li>${avatar(o.id, o.naam, !o.viewing.visible)}<span><b>${esc(o.naam)}${o.id === live!.me ? ' (jij)' : ''}</b><small>${o.viewing.visible ? (o.viewing.trip ? 'kijkt naar ' + esc(tripName(o.viewing.trip)) : 'online') : 'op de achtergrond'}</small></span></li>`).join('');
-    const earlier = s.members.filter((m: Member) => !onlineIds.has(m.id)).map((m) => `<li>${avatar(m.id, m.naam, true)}<span><b>${esc(m.naam)}</b><small>${ago(m.lastSeen)}</small></span></li>`).join('');
+    const people = s.online.map((o) => `<li>${avatar(o.id, o.naam, !o.viewing.visible)}<span><b>${esc(o.naam)}${o.id === live.me ? ' (jij)' : ''}</b><small>${o.viewing.visible ? (o.viewing.trip ? 'kijkt naar ' + esc(tripName(o.viewing.trip)) : 'online') : 'op de achtergrond'}</small></span></li>`).join('');
+    const rec = recent().map((m) => `<li>${avatar(m.id, m.naam, true)}<span><b>${esc(m.naam)}</b><small>${ago(m.lastSeen)}</small></span></li>`).join('');
     panel.innerHTML = `
-      <div class="chead"><h4>Groep</h4>${status ? `<span class="cstatus">${status}</span>` : ''}</div>
+      <div class="chead"><h4>Nu online</h4>${status ? `<span class="cstatus">${status}</span>` : ''}</div>
       <ul class="people">${people}</ul>
+      ${rec ? `<h4>Laatste uur online</h4><ul class="people">${rec}</ul>` : ''}
       <ul class="msgs" id="chatMsgs">${s.messages.map((m, i) => msgHTML(m, s.messages[i - 1])).join('') || '<li class="empty">Nog geen berichten. Zeg eens hallo!</li>'}</ul>
-      <form class="csend" id="chatForm"><label class="vh" for="chatText">Bericht</label><input id="chatText" maxlength="500" autocomplete="off" placeholder="Bericht aan de groep"><button type="submit" class="primary">Stuur</button></form>
-      <details class="cmore"${moreOpen ? ' open' : ''}><summary>Leden en uitnodigen</summary>
-        ${earlier ? `<h4>Eerder online</h4><ul class="people">${earlier}</ul>` : ''}
-        <h4>Iemand uitnodigen</h4>
-        <p class="msrc">Stuur deze link naar de groep. Wie hem opent, doet mee.</p>
-        <div class="grp"><button type="button" id="chatCopy">Kopieer uitnodigingslink</button></div>
-        <div class="grp"><button type="button" id="chatLeave">Groep verlaten</button></div>
-      </details>`;
+      <form class="csend" id="chatForm"><label class="vh" for="chatText">Bericht</label><input id="chatText" maxlength="500" autocomplete="off" placeholder="Bericht aan iedereen"><button type="submit" class="primary">Stuur</button></form>`;
     ($('chatForm') as HTMLFormElement).onsubmit = (e) => {
       e.preventDefault();
       const inp = $('chatText') as HTMLInputElement, text = inp.value.trim();
-      if (!text || !live || live.state.status !== 'online') return;
+      if (!text || live.state.status !== 'online') return;
       live.say(text);
       inp.value = '';
     };
-    $('chatCopy').onclick = async (e) => {
-      const b = e.currentTarget as HTMLButtonElement, link = inviteLink(group);
-      try { await navigator.clipboard.writeText(link); b.textContent = 'Gekopieerd!'; }
-      catch { prompt('Kopieer deze link:', link); }
-      setTimeout(() => (b.textContent = 'Kopieer uitnodigingslink'), 2500);
-    };
-    $('chatLeave').onclick = () => { if (confirm('Groep verlaten? Met de uitnodigingslink kun je later weer meedoen.')) { setGroup(null); connect(); } };
     const inp = $('chatText') as HTMLInputElement;
     inp.value = typed;
     if (focused) inp.focus();
     scrollDown();
-  }
-
-  function renderJoin() {
-    panel.innerHTML = `
-      <div class="chead"><h4>Samen aftellen</h4></div>
-      <p class="cintro">Zie wie er meekijkt en stuur berichten naar je skimaten. Maak een groep en deel de link, of doe mee met een link die je kreeg.</p>
-      <div class="grp"><button type="button" class="primary" id="chatNew">Maak een groep</button></div>
-      <form class="cjoin" id="chatJoin" novalidate><label class="fld" for="chatCode"><span>Uitnodigingslink of code</span><input id="chatCode" autocomplete="off" placeholder="…#groep=sneeuw-…"></label><p class="werr" id="chatErr" role="alert"></p><div class="grp"><button type="submit">Doe mee</button></div></form>`;
-    $('chatNew').onclick = () => { setGroup(newGroupCode()); connect(); };
-    ($('chatJoin') as HTMLFormElement).onsubmit = (e) => {
-      e.preventDefault();
-      const v = ($('chatCode') as HTMLInputElement).value.trim().toLowerCase(), m = v.match(/([a-z0-9]+-[a-z0-9-]+)\s*$/);
-      if (!m || !/^[a-z0-9-]{6,40}$/.test(m[1])) { $('chatErr').textContent = 'Dat lijkt geen geldige link of code.'; return; }
-      setGroup(m[1]);
-      connect();
-    };
   }
 
   // ---------- toasts ----------
@@ -173,11 +142,11 @@ export function startLiveUI(opts: { apiBase: string; naam: string; trip: string 
     setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, ms);
   }
 
-  // keep 'x min geleden' fresh while the panel is open
-  setInterval(() => { if (open) render(); }, 60_000);
+  // 'x min geleden' and the one-hour window move on with time
+  setInterval(render, 60_000);
 
-  connect();
+  render();
   return {
-    setTrip(t: string | null) { trip = t; live?.setTrip(t); },
+    setTrip(t: string | null) { trip = t; live.setTrip(t); },
   };
 }
