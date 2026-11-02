@@ -25,13 +25,14 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
 
 export const inviteUrl = (token: string) => `${location.origin}/#invite=${token}`;
 
-/** opened a personal link? swap it for a session (and tidy the address bar). Returns an error text when the link didn't work. */
-export async function redeemFromLink(): Promise<string | null> {
+/** opened a personal link? swap it for a session (and tidy the address bar).
+ *  error: the link didn't work; reset: it was sent after 'wachtwoord vergeten' */
+export async function redeemFromLink(): Promise<{ error: string | null; reset: boolean }> {
   const m = location.hash.match(/invite=([A-Za-z0-9_-]+)/);
-  if (!m) return null;
+  if (!m) return { error: null, reset: false };
   history.replaceState(null, '', location.pathname + location.search);
-  try { await api('/auth/redeem', { method: 'POST', body: { token: m[1] } }); return null; }
-  catch (e) { return (e as Error).message; }
+  try { const r = await api<{ reset?: boolean }>('/auth/redeem', { method: 'POST', body: { token: m[1] } }); return { error: null, reset: !!r.reset }; }
+  catch (e) { return { error: (e as Error).message, reset: false }; }
 }
 
 /** null = not signed in */
@@ -62,8 +63,17 @@ export function showGate(error: string | null) {
       <label class="fld" for="gPw"><span>Wachtwoord</span><input id="gPw" type="password" autocomplete="current-password" required></label>
     </section>
     <p class="werr" id="gErr" role="alert">${error ? esc(error) : ''}</p>
-    <div class="wnav"><button type="submit" class="primary">Inloggen</button></div></form>`);
+    <div class="wnav"><button type="button" id="gForgot">Wachtwoord vergeten?</button><button type="submit" class="primary">Inloggen</button></div></form>`);
   const f = c.querySelector('#gForm') as HTMLFormElement;
+  (c.querySelector('#gForgot') as HTMLButtonElement).onclick = async () => {
+    const email = (c.querySelector('#gEmail') as HTMLInputElement).value.trim(), err = c.querySelector('#gErr')!;
+    if (!email) { err.textContent = 'Vul eerst je e-mailadres in, dan vragen we een nieuwe link voor je aan.'; (c.querySelector('#gEmail') as HTMLInputElement).focus(); return; }
+    try {
+      await api('/auth/forgot', { method: 'POST', body: { email } });
+      err.className = 'msrc';
+      err.textContent = 'Aangevraagd! De organisator ziet je verzoek en stuurt je een nieuwe persoonlijke link. Open die, dan kies je een nieuw wachtwoord.';
+    } catch (e) { err.className = 'werr'; err.textContent = (e as Error).message; }
+  };
   f.onsubmit = async (e) => {
     e.preventDefault();
     const email = (c.querySelector('#gEmail') as HTMLInputElement).value.trim();
@@ -107,6 +117,26 @@ export function askDates(me: Me): Promise<Me> {
       try { resolve(await api<Me>('/me', { method: 'PATCH', body: { naam, trips } })); }
       catch (e) { err.textContent = (e as Error).message; }
     };
+  });
+}
+
+/** opened a link after 'wachtwoord vergeten': choose a new password right away */
+export function askPassword(me: Me): Promise<void> {
+  return new Promise((resolve) => {
+    const c = card(`<form id="pwForm" novalidate>
+      <div class="wizhead">${LOGO}<b>PISTENPULS</b></div>
+      <section><h1>Nieuw wachtwoord</h1><p>Je bent weer ingelogd, ${esc(me.user.naam)}. Kies een nieuw wachtwoord, dan kun je daarna weer gewoon inloggen met ${esc(me.user.email)}.</p>
+        <input type="email" autocomplete="username" value="${esc(me.user.email)}" hidden>
+        <label class="fld" for="pwNew"><span>Nieuw wachtwoord (min. 8 tekens)</span><input id="pwNew" type="password" autocomplete="new-password" minlength="8" required></label></section>
+      <p class="werr" id="pwErr" role="alert"></p>
+      <div class="wnav"><button type="button" id="pwSkip">Later</button><button type="submit" class="primary">Opslaan</button></div></form>`);
+    (c.querySelector('#pwSkip') as HTMLButtonElement).onclick = () => resolve();
+    (c.querySelector('#pwForm') as HTMLFormElement).onsubmit = async (e) => {
+      e.preventDefault();
+      try { await api('/me/password', { method: 'PUT', body: { password: (c.querySelector('#pwNew') as HTMLInputElement).value } }); me.user.hasPassword = true; resolve(); }
+      catch (e) { c.querySelector('#pwErr')!.textContent = (e as Error).message; }
+    };
+    (c.querySelector('#pwNew') as HTMLInputElement).focus();
   });
 }
 

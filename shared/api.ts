@@ -14,6 +14,8 @@ export interface MyTrip {
 export interface Me {
   user: { id: string; email: string; naam: string; isAdmin: boolean; hasPassword: boolean };
   trips: MyTrip[];
+  /** admins only: people waiting for a new link because they forgot their password */
+  resets: number;
 }
 
 export interface AdminTrip {
@@ -34,6 +36,8 @@ export interface AdminUser {
   sessions: number;
   /** an unused, unexpired invite exists */
   invitePending: boolean;
+  /** asked for a new password ('wachtwoord vergeten') */
+  resetRequested: boolean;
 }
 
 export interface AdminState {

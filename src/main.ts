@@ -1,7 +1,7 @@
 import './style.css';
 import { loadRuntimeConfig } from './config';
 import { startApp } from './app';
-import { askDates, hideCards, loadMe, needsDates, redeemFromLink, showGate, showNoTrips } from './account';
+import { askDates, askPassword, hideCards, loadMe, needsDates, redeemFromLink, showGate, showNoTrips } from './account';
 import { initAdmin, openAdmin } from './admin';
 
 declare global { function ppRetry(): void }
@@ -21,11 +21,12 @@ async function boot() {
   // hosted without a server: trips are chosen in this browser (wizard), no accounts or live
   if (!RT.live) return startApp(RT, null);
 
-  const linkError = await redeemFromLink();
+  const link = await redeemFromLink();
   let me;
   try { me = await loadMe(); }
   catch { document.getElementById('loadStep')!.textContent = 'Server niet bereikbaar. Nieuwe poging over een halve minuut.'; setTimeout(boot, 30_000); return; }
-  if (!me) return showGate(linkError);
+  if (!me) return showGate(link.error);
+  if (link.reset) { await askPassword(me); hideCards(); }
   if (!me.trips.length) return showNoTrips(me, me.user.isAdmin ? openAdmin : null);
   if (needsDates(me)) { me = await askDates(me); hideCards(); }
   startApp(RT, me);

@@ -61,9 +61,17 @@ export function createApp<E extends Env>(platform: Platform<E>) {
 
   app.post('/auth/redeem', async (c) => {
     const { token } = await body(c);
-    const session = typeof token === 'string' && token.length > 20 ? await dir(c).redeem(token) : null;
-    if (!session) return c.json({ error: 'Deze link is al gebruikt of verlopen. Vraag een nieuwe aan.' }, 400);
-    startSession(c, session);
+    const r = typeof token === 'string' && token.length > 20 ? await dir(c).redeem(token) : null;
+    if (!r) return c.json({ error: 'Deze link is al gebruikt of verlopen. Vraag een nieuwe aan.' }, 400);
+    startSession(c, r.session);
+    return c.json({ ok: true, reset: r.reset });
+  });
+
+  /** the same answer for every address, so this doesn't reveal who has an account */
+  app.post('/auth/forgot', async (c) => {
+    const email = cleanEmail((await body(c)).email);
+    if (!EMAIL_RE.test(email)) return c.json({ error: 'Vul een geldig e-mailadres in.' }, 400);
+    await dir(c).requestReset(email);
     return c.json({ ok: true });
   });
 

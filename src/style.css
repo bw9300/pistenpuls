@@ -316,6 +316,9 @@ body.wizard .toasts,body.wizard .chat{display:none}
 .aitem .aform,.aitem .aout:not(:empty){grid-column:1/-1}
 .amain{display:flex;flex-direction:column;gap:3px;min-width:0}
 .amain small{color:var(--quiet);font-size:13px;overflow-wrap:anywhere}
+.brand.adminping{position:relative}
+.brand.adminping::after{content:'';position:absolute;left:50px;top:6px;width:10px;height:10px;border-radius:50%;background:#E0533D;box-shadow:0 0 0 2px rgba(15,27,38,.9)}
+.atag.areset{background:#E0533D;color:var(--snow);text-transform:none;letter-spacing:0}
 .atag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--night);background:var(--lantaarn);border-radius:6px;padding:1px 6px;vertical-align:2px}
 .achips{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0}
 .achips span{font-size:12px;background:#2B4A66;border-radius:999px;padding:2px 9px}

@@ -23,6 +23,8 @@ export function initAdmin(me: Me) {
   const logo = document.querySelector('.brand') as HTMLElement | null;
   if (!logo) return;
   logo.classList.add('adminable');
+  // someone forgot their password: a dot on the logo until they have their new link
+  if (me.resets) { logo.classList.add('adminping'); logo.title = `${me.resets === 1 ? 'Iemand vraagt' : me.resets + ' mensen vragen'} een nieuwe link (wachtwoord vergeten)`; }
   let clicks: number[] = [];
   logo.addEventListener('click', () => {
     const now = Date.now();
@@ -86,8 +88,8 @@ function personForm(d: AdminState, u: AdminUser | null) {
 
 function people(d: AdminState) {
   const tripName = (id: string) => d.trips.find((t) => t.id === id)?.naam || '?';
-  const rows = d.users.map((u) => `<li class="aitem" data-user="${u.id}">
-      <div class="amain"><b>${esc(u.naam)}${u.isAdmin ? ' <span class="atag">admin</span>' : ''}</b><small>${esc(u.email)}</small>
+  const rows = [...d.users].sort((a, b) => +b.resetRequested - +a.resetRequested).map((u) => `<li class="aitem" data-user="${u.id}">
+      <div class="amain"><b>${esc(u.naam)}${u.isAdmin ? ' <span class="atag">admin</span>' : ''}${u.resetRequested ? ' <span class="atag areset">wachtwoord vergeten: stuur een nieuwe link</span>' : ''}</b><small>${esc(u.email)}</small>
         <div class="achips">${u.trips.map((t) => `<span>${esc(tripName(t))}</span>`).join('') || '<em>geen reis</em>'}</div>
         <small>laatst gezien ${seen(u.lastSeen)} · ${u.sessions} ${u.sessions === 1 ? 'apparaat' : 'apparaten'}${u.invitePending ? ' · link verstuurd, nog niet geopend' : ''}</small></div>
       <div class="aacts"><button type="button" data-act="link">Link</button><button type="button" data-act="edit">Bewerk</button><button type="button" data-act="more" aria-label="Meer">⋯</button></div>

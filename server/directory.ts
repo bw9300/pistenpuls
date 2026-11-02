@@ -16,6 +16,7 @@ export const DIRECTORY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, created INTEGER NOT NULL, last_used INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS passwords (user_id TEXT PRIMARY KEY, hash TEXT NOT NULL, updated INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS login_fails (email TEXT PRIMARY KEY, n INTEGER NOT NULL, first INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS reset_requests (user_id TEXT PRIMARY KEY, at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS trip_members_user ON trip_members (user_id)`,
   `CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)`,
 ];
@@ -87,14 +88,23 @@ export function directory(db: Db) {
     schema,
 
     // ---------- sign-in ----------
-    /** invite token → new session token (the invite can't be used again) */
-    async redeem(inviteToken: string): Promise<string | null> {
+    /** invite token → new session token (the invite can't be used again); reset = this person asked for a new password */
+    async redeem(inviteToken: string): Promise<{ session: string; reset: boolean } | null> {
       await schema();
       const h = await hashToken(inviteToken);
       const [inv] = await db.all('SELECT user_id, expires, used FROM invites WHERE token_hash = ?', h);
       if (!inv || inv.used || Number(inv.expires) < Date.now()) return null;
       await db.run('UPDATE invites SET used = ? WHERE token_hash = ?', Date.now(), h);
-      return newSession(inv.user_id);
+      const reset = (await db.all('SELECT 1 FROM reset_requests WHERE user_id = ?', inv.user_id)).length > 0;
+      if (reset) await db.run('DELETE FROM reset_requests WHERE user_id = ?', inv.user_id);
+      return { session: await newSession(inv.user_id), reset };
+    },
+
+    /** 'forgot my password': shows up in the admin panel, the admin sends a new link (there is no mail) */
+    async requestReset(email: string) {
+      await schema();
+      const [u] = await db.all('SELECT id FROM users WHERE email = ?', email);
+      if (u) await db.run('INSERT OR REPLACE INTO reset_requests (user_id, at) VALUES (?, ?)', u.id, Date.now());
     },
 
     /** email + password → new session; too many wrong attempts on one email pause it for 15 minutes */
@@ -151,7 +161,8 @@ export function directory(db: Db) {
       await schema();
       const trips = await db.all('SELECT t.id, t.area, t.naam, t.aankomst AS reis, m.aankomst FROM trip_members m JOIN trips t ON t.id = m.trip_id WHERE m.user_id = ? ORDER BY COALESCE(m.aankomst, t.aankomst)', u.id);
       const hasPassword = (await db.all('SELECT 1 FROM passwords WHERE user_id = ?', u.id)).length > 0;
-      return { user: { ...u, hasPassword }, trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomstReis: t.reis, aankomst: t.aankomst || null })) };
+      const resets = u.isAdmin ? Number((await db.all('SELECT COUNT(*) AS n FROM reset_requests'))[0].n) : 0;
+      return { user: { ...u, hasPassword }, resets, trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomstReis: t.reis, aankomst: t.aankomst || null })) };
     },
 
     async updateMe(userId: string, naam: string | null, dates: { id: string; aankomst: string }[]) {
@@ -171,14 +182,15 @@ export function directory(db: Db) {
       const trips = await db.all('SELECT t.id, t.area, t.naam, t.aankomst, (SELECT COUNT(*) FROM trip_members m WHERE m.trip_id = t.id) AS members FROM trips t ORDER BY t.aankomst');
       const users = await db.all(`SELECT u.id, u.email, u.naam, u.is_admin, u.last_seen,
           (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id) AS sessions,
-          (SELECT COUNT(*) FROM invites i WHERE i.user_id = u.id AND i.used IS NULL AND i.expires > ?) AS invites
+          (SELECT COUNT(*) FROM invites i WHERE i.user_id = u.id AND i.used IS NULL AND i.expires > ?) AS invites,
+          (SELECT COUNT(*) FROM reset_requests r WHERE r.user_id = u.id) AS reset
         FROM users u ORDER BY u.naam COLLATE NOCASE`, Date.now());
       const members = await db.all('SELECT trip_id, user_id FROM trip_members');
       return {
         trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomst: t.aankomst, members: Number(t.members) })),
         users: users.map((u) => ({
           id: u.id, email: u.email, naam: u.naam, isAdmin: !!Number(u.is_admin), lastSeen: u.last_seen == null ? null : Number(u.last_seen),
-          sessions: Number(u.sessions), invitePending: Number(u.invites) > 0,
+          sessions: Number(u.sessions), invitePending: Number(u.invites) > 0, resetRequested: Number(u.reset) > 0,
           trips: members.filter((m) => m.user_id === u.id).map((m) => m.trip_id),
         })),
       };
@@ -218,7 +230,7 @@ export function directory(db: Db) {
       return true;
     },
     async deleteUser(id: string) {
-      for (const t of ['trip_members', 'sessions', 'invites', 'passwords']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, id);
+      for (const t of ['trip_members', 'sessions', 'invites', 'passwords', 'reset_requests']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, id);
       await db.run('DELETE FROM users WHERE id = ?', id);
     },
     /** a fresh personal invite; older unused ones stop working */
