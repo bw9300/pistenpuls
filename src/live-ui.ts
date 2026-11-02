@@ -4,6 +4,7 @@
 import { RECENT_MS, SYSTEM, type ChatMessage, type Member, type OnlineMember } from '../shared/live';
 import { connectLive, type Live, type LiveEvent } from './live';
 import { esc } from './settings';
+import { avatarUrl, onAvatars, startAvatars } from './avatars';
 import { createGames } from './games';
 import { SNOWBALL } from './snowball';
 import { SKIER, type Stage } from './ski';
@@ -12,7 +13,11 @@ const $ = (id: string) => document.getElementById(id)!;
 const COLORS = ['#E0533D', '#F0B45A', '#5B9BD5', '#7FB77E', '#B08BD9', '#E58FB1', '#4FB3B0'];
 const color = (id: string) => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0; return COLORS[Math.abs(h) % COLORS.length]; };
 const initial = (naam: string) => esc((naam.trim()[0] || '?').toUpperCase());
-const avatar = (id: string, naam: string, dim = false) => `<i class="av${dim ? ' dim' : ''}" style="--c:${color(id)}" aria-hidden="true">${initial(naam)}</i>`;
+/** their photo, or the first letter of their name on their colour */
+const avatar = (id: string, naam: string, dim = false) => {
+  const url = avatarUrl(id);
+  return `<i class="av${dim ? ' dim' : ''}${url ? ' photo' : ''}" style="--c:${color(id)}" aria-hidden="true">${url ? `<img src="${url}" alt="">` : initial(naam)}</i>`;
+};
 const time = (ts: number) => new Date(ts).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
 function ago(ts: number) {
@@ -71,6 +76,8 @@ export function startLiveUI(opts: {
   for (const t of opts.trips) lives.set(t.id, connectLive({ apiBase: opts.apiBase, trip: t.id, active, onEvent: (e) => onEvent(t.id, e) }));
   const cur = () => (active ? lives.get(active) : undefined);
   const games = createGames({ toast, stage: opts.stage });
+  startAvatars();
+  onAvatars(() => render());
 
   function unread(trip: string) {
     const l = lives.get(trip);

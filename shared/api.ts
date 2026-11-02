@@ -12,7 +12,9 @@ export interface MyTrip {
 }
 
 export interface Me {
-  user: { id: string; email: string; naam: string; isAdmin: boolean; hasPassword: boolean };
+  user: { id: string; email: string; naam: string; isAdmin: boolean; hasPassword: boolean;
+    /** version of my photo (for its address), null without one */
+    avatar: number | null };
   trips: MyTrip[];
   /** admins only: people waiting for a new link because they forgot their password */
   resets: number;
@@ -49,6 +51,10 @@ export interface AdminOnline {
   trip: string;
   online: { id: string; naam: string; visible: boolean }[];
 }
+
+/** a profile photo as sent by the browser: a small JPEG */
+export const AVATAR_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/;
+export const AVATAR_MAX = 120_000;
 
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

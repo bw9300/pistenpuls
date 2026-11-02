@@ -6,6 +6,7 @@ import { MIN_TAP_MS, SKI_TAPS } from '../shared/ski';
 import type { Live } from './live';
 import { esc } from './settings';
 import { COLORS, fmt } from './snowball';
+import { avatarImage } from './avatars';
 
 /** what the race needs from the dashboard's 3D scene (app.ts) */
 export interface Stage {
@@ -74,7 +75,7 @@ function canvasTex(w: number, h: number, draw: (c: CanvasRenderingContext2D) => 
   return t;
 }
 
-function skier(naam: string, jacket: string, head: string) {
+function skier(title: string, naam: string, jacket: string, head: string) {
   const g = new THREE.Group(), mat = (c: string | number) => new THREE.MeshLambertMaterial({ color: c });
   const dark = mat('#26384A'), coat = mat(jacket);
   // skis
@@ -87,31 +88,35 @@ function skier(naam: string, jacket: string, head: string) {
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.36, 8), coat); arm.position.set(x, 0.66, 0.08); arm.rotation.x = -0.7; body.add(arm);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 6), dark); pole.position.set(x * 1.2, 0.42, 0.22); pole.rotation.x = -0.35; body.add(pole);
   }
-  // the head: their avatar (colour + first letter); later a photo
+  // the head: a round face that always looks at the camera, with their photo (or first letter on their colour)
   const letter = (naam.trim()[0] || '?').toUpperCase();
-  // the letter four times around, so it shows from every side (the camera is mostly behind them)
-  const face = canvasTex(512, 128, (c) => {
-    c.fillStyle = head; c.fillRect(0, 0, 512, 128);
-    c.fillStyle = '#fff'; c.font = '800 72px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    for (const x of [64, 192, 320, 448]) c.fillText(letter, x, 68);
+  const draw = (img: HTMLImageElement | null) => canvasTex(256, 256, (c) => {
+    c.beginPath(); c.arc(128, 128, 120, 0, Math.PI * 2); c.closePath();
+    c.fillStyle = head; c.fill();
+    if (img) { c.save(); c.clip(); c.drawImage(img, 8, 8, 240, 240); c.restore(); }
+    else { c.fillStyle = '#fff'; c.font = '800 130px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(letter, 128, 138); }
+    c.lineWidth = 12; c.strokeStyle = jacket; c.stroke();
   });
-  const headM = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), new THREE.MeshLambertMaterial({ map: face }));
-  headM.position.y = 1.05; headM.rotation.y = -Math.PI / 2; body.add(headM);
-  const hat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat('#F4EDE1')); hat.position.y = 1.29; body.add(hat);
+  const faceM = new THREE.SpriteMaterial({ map: draw(null) });
+  const headS = new THREE.Sprite(faceM);
+  headS.scale.set(0.5, 0.5, 1); headS.position.y = 1.05; body.add(headS);
+  const hat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat('#F4EDE1')); hat.position.y = 1.33; body.add(hat);
   body.rotation.x = 0.2;
   g.add(body);
   // name above the head, always readable
   const tag = canvasTex(512, 128, (c) => {
-    c.font = '700 60px system-ui, sans-serif'; const w = Math.min(500, c.measureText(naam).width + 60);
+    c.font = '700 60px system-ui, sans-serif'; const w = Math.min(500, c.measureText(title).width + 60);
     c.fillStyle = 'rgba(15,27,38,.82)'; c.beginPath(); c.roundRect((512 - w) / 2, 14, w, 100, 50); c.fill();
     c.fillStyle = jacket; c.fillRect((512 - w) / 2 + 26, 54, 20, 20);
-    c.fillStyle = '#F4EDE1'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(naam.slice(0, 14), 256 + 12, 66);
+    c.fillStyle = '#F4EDE1'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(title.slice(0, 14), 256 + 12, 66);
   });
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, depthTest: false, transparent: true }));
   label.scale.set(2.4, 0.6, 1); label.position.y = 1.75; label.renderOrder = 10;
   g.add(label);
   g.scale.setScalar(FIG);
-  return { g, body };
+  /** their photo arrived: put it on the face */
+  const face = (img: HTMLImageElement | null) => { if (!img) return; faceM.map?.dispose(); faceM.map = draw(img); faceM.needsUpdate = true; };
+  return { g, body, face };
 }
 
 function gate(w: World, p: { x: number; z: number; tx: number; tz: number }, color: string) {
@@ -129,7 +134,7 @@ function gate(w: World, p: { x: number; z: number; tx: number; tz: number }, col
 
 // ---------- the race screen ----------
 export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: Stage, done: () => void, again: () => void) {
-  const me = live.state.me, them = first.a.id === me ? first.b : first.a;
+  const me = live.state.me, them = first.a.id === me ? first.b : first.a, self = first.a.id === me ? first.a : first.b;
   b.classList.add('skigame');
   b.innerHTML = `
     <div class="sktop">
@@ -177,7 +182,8 @@ export function skiScreen(b: HTMLElement, live: Live, first: GameState, stage: S
   // ---------- the 3D part ----------
   let path: ReturnType<typeof pathOf> = null, world: World | null = null;
   const group = new THREE.Group();
-  const skiers = { [me]: skier('Jij', COLORS.me, '#E0533D'), [them.id]: skier(them.naam, COLORS.them, '#5B9BD5') };
+  const skiers = { [me]: skier('Jij', self.naam, COLORS.me, '#E0533D'), [them.id]: skier(them.naam, them.naam, COLORS.them, '#5B9BD5') };
+  for (const id of [me, them.id]) avatarImage(id).then((img) => skiers[id].face(img));
   const camPos = new THREE.Vector3(), look = new THREE.Vector3(), want = new THREE.Vector3(), wantLook = new THREE.Vector3();
   let t = 0, camReady = false;
 

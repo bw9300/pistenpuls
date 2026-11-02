@@ -43,6 +43,8 @@ Iedereen kiest zelf zijn aankomstdatum per reis (bij de eerste keer inloggen, la
   Wachtwoorden staan gehasht (PBKDF2); na 10 foute pogingen op een e-mailadres volgt een pauze van een kwartier.
 - **Wachtwoord vergeten**: op het inlogscherm vraag je een nieuwe link aan. Er gaat geen mail uit: de admin ziet een rode stip op het logo
   en het verzoek bij de persoon in Beheer, maakt een link en stuurt die (bijv. via WhatsApp). Wie die link opent, kiest meteen een nieuw wachtwoord.
+- **Profielfoto**: menu › Instellingen › *Foto maken*. Alleen met de camera (geen upload), met een hoofdsilhouet als richtlijn; 320×320 JPEG in de tabel `avatars`.
+  Alleen zichtbaar voor wie een reis met je deelt (`/api/avatar/<id>`). Een admin kan een foto verwijderen (Beheer › Personen › ⋯).
 - **Beheer**: 5× snel op het logo klikken (alleen voor admins). Personen toevoegen, ze aan reizen koppelen, links maken, reizen aanmaken, wie er online is.
 - **De allereerste admin-link** maak je op de command line:
   ```sh

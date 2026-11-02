@@ -454,3 +454,23 @@ body.racing #stage,body.racing .menubtn,body.racing .toasts,body.racing #marker{
 @media (max-height:560px){.skbottom .sbhelp{display:none}.sb .sktap{min-height:80px}}
 .sktap .skic path{stroke:#fff}.sktap .skic circle{fill:#fff}
 @media (pointer:coarse){.linkbox input{font-size:16px}}
+
+/* ---------- profile photos ---------- */
+.av.photo{overflow:hidden;padding:0;background:var(--c)}
+.av.photo img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+.av.dim.photo img{filter:grayscale(.6) brightness(.8)}
+.sphoto{display:flex;align-items:center;gap:14px}
+.sface{flex:none;width:72px;height:72px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:#2B4A66;border:2px solid var(--line);font:800 30px var(--display);font-style:normal;color:var(--snow)}
+.sface img{width:100%;height:100%;object-fit:cover}
+.sphoto .grp{margin-top:8px}
+
+/* the camera with the head outline */
+.sb.cam{z-index:45}
+.camcard{gap:12px}
+.camview{position:relative;width:min(78vw,52vh,380px);aspect-ratio:1;border-radius:22px;overflow:hidden;background:#0B1520}
+.camview video,.camview img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.camview video{transform:scaleX(-1)}
+.camsil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.cam.checking .camview img{inset:9%;width:82%;height:82%;border-radius:50%;border:4px solid var(--lantaarn)}
+.camhint{font-size:17px!important;color:var(--snow)!important}
+.camcard .werr{min-height:0}

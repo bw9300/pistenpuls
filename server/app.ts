@@ -1,7 +1,7 @@
 // The API, independent of where it runs. cloudflare.ts and node.ts only connect it to a platform.
 import { Hono, type Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { DATE_RE, EMAIL_RE, type AdminOnline } from '../shared/api.ts';
+import { AVATAR_MAX, AVATAR_RE, DATE_RE, EMAIL_RE, type AdminOnline } from '../shared/api.ts';
 import { roomFor } from '../shared/live.ts';
 import { cleanEmail, cleanName, MIN_PASSWORD, SESSION_DAYS, type Directory, type SessionUser } from './directory.ts';
 
@@ -110,6 +110,24 @@ export function createApp<E extends Env>(platform: Platform<E>) {
     await dir(c).setPassword(user(c).id, password);
     return c.json({ ok: true });
   });
+
+  // ---------- profile photos ----------
+  app.put('/me/avatar', signedIn, async (c) => {
+    const { image } = await body(c);
+    if (typeof image !== 'string' || image.length > AVATAR_MAX || !AVATAR_RE.test(image)) return c.json({ error: 'Deze foto kan niet worden opgeslagen. Probeer het opnieuw.' }, 400);
+    await dir(c).setAvatar(user(c).id, image);
+    return c.json({ ok: true });
+  });
+  app.delete('/me/avatar', signedIn, async (c) => { await dir(c).deleteAvatar(user(c).id); return c.json({ ok: true }); });
+  app.get('/avatars', signedIn, async (c) => c.json(await dir(c).avatarVersions(user(c).id)));
+  app.get('/avatar/:id', signedIn, async (c) => {
+    const data = await dir(c).avatar(user(c), c.req.param('id')!);
+    if (!data) return c.json({ error: 'geen foto' }, 404);
+    const bin = Uint8Array.from(atob(data.slice(data.indexOf(',') + 1)), (ch) => ch.charCodeAt(0));
+    // the address has the version in it (?v=…), so a browser may keep it
+    return c.body(bin, 200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=31536000, immutable' });
+  });
+  app.delete('/admin/users/:id/avatar', signedIn, admin, async (c) => { await dir(c).deleteAvatar(c.req.param('id')!); return c.json({ ok: true }); });
 
   /** a 15-minute link to sign in on another device */
   app.post('/me/device-link', signedIn, async (c) => c.json({ token: await dir(c).deviceLink(user(c).id) }));

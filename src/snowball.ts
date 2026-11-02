@@ -4,18 +4,27 @@ import type { GameEvent, GameState } from '../shared/games';
 import { DUCK_COOLDOWN_MS, DUCK_MS, RELOAD_MS, WIN_HITS } from '../shared/snowball';
 import type { Live } from './live';
 import { esc } from './settings';
+import { avatarUrl } from './avatars';
 
 /** the little snowball icon (chat buttons, invite) */
 export const SNOWBALL = '<svg class="sbic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#F4F8FC"/><path d="M6 9.5c2-1 3.5-.6 5 .4M13.5 15c1.6.6 3 .5 4.5-.6M8 16.5c.6.4 1.4.6 2 .4" stroke="#A9C3D9" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="12" cy="12" r="9" fill="none" stroke="#7FA3C2" stroke-width="1.2"/></svg>';
 
-const figure = (c: string) => `<svg class="fig" viewBox="0 0 60 100" aria-hidden="true">
+/** a player; with a photo the face is the photo (and no hat over it) */
+let figN = 0;
+const figure = (c: string, photo: string | null) => {
+  const clip = 'fh' + figN++;
+  const head = photo
+    ? `<clipPath id="${clip}"><circle cx="30" cy="25" r="13"/></clipPath><circle cx="30" cy="25" r="14" fill="${c}"/><image href="${photo}" x="17" y="12" width="26" height="26" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>`
+    : `<circle cx="30" cy="27" r="12" fill="#F1C9A5"/><circle cx="35" cy="26" r="1.6" fill="#1B2633"/><path d="M33 32q3 1.5 5-.5" stroke="#1B2633" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+  <path d="M17.5 24Q30 4 42.5 24Z" fill="${c}"/><rect x="16.5" y="21" width="27" height="5" rx="2.5" fill="#F4EDE1"/><circle cx="30" cy="9" r="4.5" fill="#F4EDE1"/>`;
+  return `<svg class="fig" viewBox="0 0 60 100" aria-hidden="true">
   <rect x="19" y="70" width="9" height="26" rx="4" fill="#26384A"/><rect x="32" y="70" width="9" height="26" rx="4" fill="#26384A"/>
   <rect x="13" y="39" width="34" height="38" rx="12" fill="${c}"/>
   <g class="arm"><rect x="40" y="42" width="9" height="27" rx="4.5" fill="${c}"/><circle cx="44.5" cy="70" r="4.5" fill="#F1C9A5"/></g>
   <rect x="17" y="37" width="26" height="7" rx="3.5" fill="#F4EDE1"/>
-  <circle cx="30" cy="27" r="12" fill="#F1C9A5"/><circle cx="35" cy="26" r="1.6" fill="#1B2633"/><path d="M33 32q3 1.5 5-.5" stroke="#1B2633" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-  <path d="M17.5 24Q30 4 42.5 24Z" fill="${c}"/><rect x="16.5" y="21" width="27" height="5" rx="2.5" fill="#F4EDE1"/><circle cx="30" cy="9" r="4.5" fill="#F4EDE1"/>
+  ${head}
 </svg>`;
+};
 
 export const COLORS = { me: '#E0533D', them: '#5B9BD5' };
 export const fmt = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -31,8 +40,8 @@ export function snowballScreen(b: HTMLElement, live: Live, first: GameState, don
       <div class="sbscore them"><b>${esc(them.naam)}</b><span data-hits="${them.id}"></span></div>
     </div>
     <div class="sbfield" data-field>
-      <div class="sbp me" data-p="${me}">${figure(COLORS.me)}</div>
-      <div class="sbp them" data-p="${them.id}">${figure(COLORS.them)}</div>
+      <div class="sbp me" data-p="${me}">${figure(COLORS.me, avatarUrl(me))}</div>
+      <div class="sbp them" data-p="${them.id}">${figure(COLORS.them, avatarUrl(them.id))}</div>
       <div class="sbwall me"></div><div class="sbwall them"></div>
       <div class="sbsay" data-say></div>
     </div>

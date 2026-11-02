@@ -16,6 +16,7 @@ export const DIRECTORY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, created INTEGER NOT NULL, last_used INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS passwords (user_id TEXT PRIMARY KEY, hash TEXT NOT NULL, updated INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS login_fails (email TEXT PRIMARY KEY, n INTEGER NOT NULL, first INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS avatars (user_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS reset_requests (user_id TEXT PRIMARY KEY, at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS trip_members_user ON trip_members (user_id)`,
   `CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)`,
@@ -161,14 +162,39 @@ export function directory(db: Db) {
       await schema();
       const trips = await db.all('SELECT t.id, t.area, t.naam, t.aankomst AS reis, m.aankomst FROM trip_members m JOIN trips t ON t.id = m.trip_id WHERE m.user_id = ? ORDER BY COALESCE(m.aankomst, t.aankomst)', u.id);
       const hasPassword = (await db.all('SELECT 1 FROM passwords WHERE user_id = ?', u.id)).length > 0;
+      const [av] = await db.all('SELECT updated FROM avatars WHERE user_id = ?', u.id);
       const resets = u.isAdmin ? Number((await db.all('SELECT COUNT(*) AS n FROM reset_requests'))[0].n) : 0;
-      return { user: { ...u, hasPassword }, resets, trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomstReis: t.reis, aankomst: t.aankomst || null })) };
+      return { user: { ...u, hasPassword, avatar: av ? Number(av.updated) : null }, resets, trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomstReis: t.reis, aankomst: t.aankomst || null })) };
     },
 
     async updateMe(userId: string, naam: string | null, dates: { id: string; aankomst: string }[]) {
       await schema();
       if (naam) await db.run('UPDATE users SET naam = ? WHERE id = ?', naam, userId);
       for (const d of dates) await db.run('UPDATE trip_members SET aankomst = ? WHERE trip_id = ? AND user_id = ?', d.aankomst, d.id, userId);
+    },
+
+    // ---------- profile photos: only for people you share a trip with ----------
+    async setAvatar(userId: string, data: string) {
+      await schema();
+      await db.run('INSERT OR REPLACE INTO avatars (user_id, data, updated) VALUES (?, ?, ?)', userId, data, Date.now());
+    },
+    async deleteAvatar(userId: string) {
+      await schema();
+      await db.run('DELETE FROM avatars WHERE user_id = ?', userId);
+    },
+    /** whose photos I may see, with their version (for the image address) */
+    async avatarVersions(viewer: string): Promise<Record<string, number>> {
+      await schema();
+      const rows = await db.all(`SELECT a.user_id, a.updated FROM avatars a WHERE a.user_id = ? OR a.user_id IN
+          (SELECT o.user_id FROM trip_members o JOIN trip_members m ON m.trip_id = o.trip_id WHERE m.user_id = ?)`, viewer, viewer);
+      return Object.fromEntries(rows.map((r) => [r.user_id, Number(r.updated)]));
+    },
+    async avatar(viewer: SessionUser, target: string): Promise<string | null> {
+      await schema();
+      const [r] = await db.all(`SELECT data FROM avatars WHERE user_id = ? AND (? = ? OR ? = 1 OR EXISTS
+          (SELECT 1 FROM trip_members o JOIN trip_members m ON m.trip_id = o.trip_id WHERE o.user_id = ? AND m.user_id = ?))`,
+        target, target, viewer.id, viewer.isAdmin ? 1 : 0, target, viewer.id);
+      return r ? r.data : null;
     },
 
     async isMember(userId: string, tripId: string) {
@@ -230,7 +256,7 @@ export function directory(db: Db) {
       return true;
     },
     async deleteUser(id: string) {
-      for (const t of ['trip_members', 'sessions', 'invites', 'passwords', 'reset_requests']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, id);
+      for (const t of ['trip_members', 'sessions', 'invites', 'passwords', 'reset_requests', 'avatars']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, id);
       await db.run('DELETE FROM users WHERE id = ?', id);
     },
     /** a fresh personal invite; older unused ones stop working */

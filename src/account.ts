@@ -3,6 +3,8 @@
 import { DATE_RE, type Me, type MyTrip } from '../shared/api';
 import { AREAS } from './areas';
 import { esc } from './settings';
+import { takeAvatar } from './avatar-cam';
+import { loadAvatars } from './avatars';
 
 const $ = (id: string) => document.getElementById(id)!;
 const LOGO = '<svg width="34" height="34" viewBox="0 0 44 44" aria-hidden="true"><path d="M4 36 L16 14 L23 24 L29 16 L40 36 Z" fill="none" stroke="#F4EDE1" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 6 C 18 2, 12 5, 16 10 L22 15 L28 10 C 32 5, 26 2, 22 6 Z" fill="#E0533D"/></svg>';
@@ -148,7 +150,15 @@ export function hideCards() {
 // ---------- settings tab in the menu ----------
 export function renderSettings(me: Me) {
   const f = $('panSet') as HTMLFormElement;
+  const photo = () => me.user.avatar
+    ? `<img src="/api/avatar/${encodeURIComponent(me.user.id)}?v=${me.user.avatar}" alt="">`
+    : `<span>${esc((me.user.naam.trim()[0] || '?').toUpperCase())}</span>`;
   f.innerHTML = `
+    <section><h4>Jouw foto</h4>
+      <div class="sphoto"><i class="sface" id="sFace">${photo()}</i>
+        <div><p class="msrc">Zo zien de anderen je in de chat en in de spelletjes. Altijd een foto van je gezicht, met de camera.</p>
+        <div class="grp"><button type="button" id="sCam">${me.user.avatar ? 'Nieuwe foto' : 'Foto maken'}</button>${me.user.avatar ? '<button type="button" id="sCamDel">Verwijderen</button>' : ''}</div></div></div>
+      <p class="werr" id="sCamErr" role="alert"></p></section>
     <section><h4>Jouw naam</h4><label class="fld" for="sName"><span class="vh">Naam</span><input id="sName" autocomplete="given-name" maxlength="30" value="${esc(me.user.naam)}"></label>
       <p class="msrc">Ingelogd als ${esc(me.user.email)}</p></section>
     <section><h4>Jouw aankomst</h4><div class="picks">${me.trips.map((t) => `<label class="wdate" for="sd-${t.id}"><span><b>${esc(t.naam)}</b></span><input type="date" id="sd-${t.id}" data-trip="${t.id}" value="${t.aankomst || t.aankomstReis}"></label>`).join('')}</div></section>
@@ -171,6 +181,19 @@ export function renderSettings(me: Me) {
     if (trips.some((t) => !DATE_RE.test(t.aankomst))) { $('sErr').textContent = 'Vul bij elke reis een aankomstdatum in.'; return; }
     try { await api('/me', { method: 'PATCH', body: { naam, trips } }); location.reload(); }
     catch (e) { $('sErr').textContent = (e as Error).message; }
+  };
+  const refreshPhoto = () => { renderSettings(me); loadAvatars(); };
+  $('sCam').onclick = async () => {
+    const image = await takeAvatar();
+    if (!image) return;
+    try { await api('/me/avatar', { method: 'PUT', body: { image } }); me.user.avatar = Date.now(); refreshPhoto(); }
+    catch (e) { $('sCamErr').textContent = (e as Error).message; }
+  };
+  const del = document.getElementById('sCamDel');
+  if (del) del.onclick = async () => {
+    if (!confirm('Je foto verwijderen? Dan staat je voorletter er weer.')) return;
+    try { await api('/me/avatar', { method: 'DELETE' }); me.user.avatar = null; refreshPhoto(); }
+    catch (e) { $('sCamErr').textContent = (e as Error).message; }
   };
   // Enter in the password field saves the password, not the whole settings form
   $('sPw').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('sPwSave').click(); } };

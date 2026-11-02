@@ -186,10 +186,11 @@ function wire(root: HTMLElement = box!) {
     if (x.dataset.act === 'link') return makeLink(id, out);
     if (x.dataset.act === 'edit') { out.innerHTML = personForm(data!, u); wire(out); return; }
     if (x.dataset.act === 'more') {
-      out.innerHTML = `<div class="grp"><button type="button" data-more="logout">Overal uitloggen</button><button type="button" data-more="delete"${u.isAdmin ? ' disabled' : ''}>Verwijderen</button></div>`;
+      out.innerHTML = `<div class="grp"><button type="button" data-more="logout">Overal uitloggen</button><button type="button" data-more="photo">Foto verwijderen</button><button type="button" data-more="delete"${u.isAdmin ? ' disabled' : ''}>Verwijderen</button></div>`;
       out.querySelectorAll<HTMLElement>('[data-more]').forEach((m) => m.addEventListener('click', async () => {
         try {
           if (m.dataset.more === 'logout' && confirm(`${u.naam} op alle apparaten uitloggen? Daarna is een nieuwe link nodig.`)) { await api(`/admin/users/${id}/logout`, { method: 'POST' }); await reload(); }
+          if (m.dataset.more === 'photo' && confirm(`De foto van ${u.naam} verwijderen? Dan staat de voorletter er weer.`)) { await api(`/admin/users/${id}/avatar`, { method: 'DELETE' }); m.textContent = 'Foto verwijderd'; }
           if (m.dataset.more === 'delete' && confirm(`${u.naam} verwijderen? Berichten in de chat blijven staan.`)) { await api(`/admin/users/${id}`, { method: 'DELETE' }); await reload(); }
         } catch (e) { out.insertAdjacentHTML('beforeend', `<p class="werr">${esc((e as Error).message)}</p>`); }
       }));
