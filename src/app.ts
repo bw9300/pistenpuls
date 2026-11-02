@@ -355,7 +355,7 @@ function fit(){VW=innerWidth;VH=innerHeight;
   else if(asp>=16/9){S=AH/1080;DH=1080;DW=AW/S}else{DW=asp>=1.3?1920:1500;S=AW/DW;DH=AH/S}
   document.body.classList.toggle('mob',MOB);document.body.classList.toggle('compact',compact);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,MOB||compact?1.25:1.5));
-  OX=il;OY=it;stage.style.width=DW+'px';stage.style.height=DH+'px';stage.style.transform=`translate(${OX}px,${OY}px) scale(${S})`;
+  OX=il;OY=it;stage.style.width=DW+'px';stage.style.height=DH+'px';stage.style.transform=`translate(${OX}px,${OY}px) scale(${S})`;stage.style.setProperty('--s',S);
   document.body.classList.toggle('narrow',DW<1920);
   renderer.setSize(VW,VH,false);camera.aspect=VW/VH;
   // keep roughly the same sideways view on tall screens

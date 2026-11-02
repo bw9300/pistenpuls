@@ -261,3 +261,5 @@ body.wizard .toasts,body.wizard .chat{display:none}
 /* explore the map yourself (controls.ts) */
 #gl{cursor:grab}
 #gl.grabbing{cursor:grabbing}
+/* phone: keep the scene bar clear of the chat and menu buttons (2 × 48px + gaps, in screen pixels; --s = stage scale) */
+.mob .bottom,.compact .bottom{right:calc(136px / var(--s,1))}
