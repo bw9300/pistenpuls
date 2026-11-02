@@ -53,10 +53,27 @@ function card(html: string) {
 }
 
 export function showGate(error: string | null) {
-  card(`<div class="wizhead">${LOGO}<b>PISTENPULS</b></div>
-    <section><h1>Servus! Je hebt een uitnodiging nodig.</h1>
-    <p>Pistenpuls is alleen voor de mensen die mee op reis gaan. Vraag de organisator om je persoonlijke link en open die op dit apparaat.</p></section>
-    ${error ? `<p class="werr" role="alert">${esc(error)}</p>` : ''}`);
+  const c = card(`<form id="gForm" novalidate>
+    <div class="wizhead">${LOGO}<b>PISTENPULS</b></div>
+    <section><h1>Servus! Log even in.</h1>
+    <p>Pistenpuls is alleen voor de mensen die mee op reis gaan. Open je persoonlijke link, of log in met je e-mailadres en wachtwoord als je dat in Instellingen hebt ingesteld.</p></section>
+    <section>
+      <label class="fld" for="gEmail"><span>E-mailadres</span><input id="gEmail" type="email" autocomplete="username" required></label>
+      <label class="fld" for="gPw"><span>Wachtwoord</span><input id="gPw" type="password" autocomplete="current-password" required></label>
+    </section>
+    <p class="werr" id="gErr" role="alert">${error ? esc(error) : ''}</p>
+    <div class="wnav"><button type="submit" class="primary">Inloggen</button></div></form>`);
+  const f = c.querySelector('#gForm') as HTMLFormElement;
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const email = (c.querySelector('#gEmail') as HTMLInputElement).value.trim();
+    const password = (c.querySelector('#gPw') as HTMLInputElement).value;
+    const err = c.querySelector('#gErr')!, b = f.querySelector('button')!;
+    if (!email || !password) { err.textContent = 'Vul je e-mailadres en wachtwoord in.'; return; }
+    b.disabled = true;
+    try { await api('/auth/login', { method: 'POST', body: { email, password } }); location.reload(); }
+    catch (e) { err.textContent = (e as Error).message; b.disabled = false; }
+  };
 }
 
 export function showNoTrips(me: Me, openAdmin: (() => void) | null) {
@@ -107,6 +124,11 @@ export function renderSettings(me: Me) {
     <section><h4>Jouw aankomst</h4><div class="picks">${me.trips.map((t) => `<label class="wdate" for="sd-${t.id}"><span><b>${esc(t.naam)}</b></span><input type="date" id="sd-${t.id}" data-trip="${t.id}" value="${t.aankomst || t.aankomstReis}"></label>`).join('')}</div></section>
     <p class="werr" id="sErr" role="alert"></p>
     <div class="grp"><button type="submit" class="primary">Opslaan</button></div>
+    <section><h4>Wachtwoord</h4>
+      <p class="msrc">${me.user.hasPassword ? 'Je hebt een wachtwoord: daarmee log je overal in met je e-mailadres.' : 'Stel een wachtwoord in, dan kun je overal inloggen met je e-mailadres, zonder link.'}</p>
+      <input type="email" autocomplete="username" value="${esc(me.user.email)}" hidden>
+      <label class="fld" for="sPw"><span class="vh">Nieuw wachtwoord</span><input id="sPw" type="password" autocomplete="new-password" minlength="8" placeholder="Nieuw wachtwoord (min. 8 tekens)"></label>
+      <div class="grp"><button type="button" id="sPwSave">${me.user.hasPassword ? 'Wachtwoord wijzigen' : 'Wachtwoord instellen'}</button></div><p class="werr" id="sPwMsg" role="status"></p></section>
     <section><h4>Ander apparaat</h4>
       <p class="msrc">Open deze link op je telefoon, tablet of tv om daar ook ingelogd te zijn. Hij werkt één keer en 15 minuten lang.</p>
       <div class="grp"><button type="button" id="sDevice">Maak een link</button></div><div id="sDeviceOut"></div></section>
@@ -120,12 +142,22 @@ export function renderSettings(me: Me) {
     try { await api('/me', { method: 'PATCH', body: { naam, trips } }); location.reload(); }
     catch (e) { $('sErr').textContent = (e as Error).message; }
   };
+  // Enter in the password field saves the password, not the whole settings form
+  $('sPw').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('sPwSave').click(); } };
+  $('sPwSave').onclick = async () => {
+    const pw = $('sPw') as HTMLInputElement, msg = $('sPwMsg');
+    try {
+      await api('/me/password', { method: 'PUT', body: { password: pw.value } });
+      pw.value = ''; msg.className = 'msrc'; msg.textContent = 'Opgeslagen. Je kunt nu inloggen met je e-mailadres en dit wachtwoord.';
+      me.user.hasPassword = true; ($('sPwSave') as HTMLButtonElement).textContent = 'Wachtwoord wijzigen';
+    } catch (e) { msg.className = 'werr'; msg.textContent = (e as Error).message; }
+  };
   $('sDevice').onclick = async () => {
     try { const { token } = await api<{ token: string }>('/me/device-link', { method: 'POST' }); linkBox($('sDeviceOut'), inviteUrl(token)); }
     catch (e) { $('sDeviceOut').textContent = (e as Error).message; }
   };
   $('sLogout').onclick = async () => {
-    if (!confirm('Uitloggen op dit apparaat? Je hebt daarna een nieuwe link nodig.')) return;
+    if (!confirm(me.user.hasPassword ? 'Uitloggen op dit apparaat?' : 'Uitloggen op dit apparaat? Je hebt daarna een nieuwe link nodig (of stel eerst een wachtwoord in).')) return;
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
     location.reload();
   };

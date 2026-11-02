@@ -12,7 +12,7 @@ export interface MyTrip {
 }
 
 export interface Me {
-  user: { id: string; email: string; naam: string; isAdmin: boolean };
+  user: { id: string; email: string; naam: string; isAdmin: boolean; hasPassword: boolean };
   trips: MyTrip[];
 }
 

@@ -39,12 +39,14 @@ Iedereen kiest zelf zijn aankomstdatum per reis (bij de eerste keer inloggen, la
 
 - **Inloggen** gaat met een persoonlijke link (`…/#invite=…`, 14 dagen geldig, werkt één keer). Daarna blijf je een jaar ingelogd (cookie).
   Op een ander apparaat: menu › Instellingen › *Ander apparaat* geeft een link van 15 minuten.
+- **Of met e-mail + wachtwoord**: stel in menu › Instellingen een wachtwoord in, daarna log je overal in zonder link.
+  Wachtwoorden staan gehasht (PBKDF2); na 10 foute pogingen op een e-mailadres volgt een pauze van een kwartier.
 - **Beheer**: 5× snel op het logo klikken (alleen voor admins). Personen toevoegen, ze aan reizen koppelen, links maken, reizen aanmaken, wie er online is.
 - **De allereerste admin-link** maak je op de command line:
   ```sh
   npm run admin:invite -- --email jij@example.com --naam Jij --admin --target prod   # of preview / local
   ```
-- Database: `users`, `trips`, `trip_members` (met ieders eigen aankomst), `invites`, `sessions` (`server/directory.ts`). Tokens staan alleen gehasht opgeslagen.
+- Database: `users`, `trips`, `trip_members` (met ieders eigen aankomst), `invites`, `sessions`, `passwords`, `login_fails` (`server/directory.ts`). Tokens staan alleen gehasht opgeslagen.
   Op Cloudflare is dat D1 (`pistenpuls`, en `pistenpuls-preview` voor preview), te bekijken in het Cloudflare-dashboard. Op Node: `data/pistenpuls.db`.
 
 ## Live: per reis

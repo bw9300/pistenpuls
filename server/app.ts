@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { DATE_RE, EMAIL_RE, type AdminOnline } from '../shared/api.ts';
 import { roomFor } from '../shared/live.ts';
-import { cleanEmail, cleanName, SESSION_DAYS, type Directory, type SessionUser } from './directory.ts';
+import { cleanEmail, cleanName, MIN_PASSWORD, SESSION_DAYS, type Directory, type SessionUser } from './directory.ts';
 
 export interface Env {
   /** Windy Webcams API key (https://api.windy.com/keys) */
@@ -54,14 +54,26 @@ export function createApp<E extends Env>(platform: Platform<E>) {
   app.get('/health', (c) => c.json({ ok: true }));
 
   // ---------- sign-in with a personal link (…/#invite=<token>) ----------
+  const startSession = (c: C, session: string) => setCookie(c, SESSION_COOKIE, session, {
+    httpOnly: true, sameSite: 'Lax', path: '/', maxAge: SESSION_DAYS * 86_400,
+    secure: new URL(c.req.url).protocol === 'https:',
+  });
+
   app.post('/auth/redeem', async (c) => {
     const { token } = await body(c);
     const session = typeof token === 'string' && token.length > 20 ? await dir(c).redeem(token) : null;
     if (!session) return c.json({ error: 'Deze link is al gebruikt of verlopen. Vraag een nieuwe aan.' }, 400);
-    setCookie(c, SESSION_COOKIE, session, {
-      httpOnly: true, sameSite: 'Lax', path: '/', maxAge: SESSION_DAYS * 86_400,
-      secure: new URL(c.req.url).protocol === 'https:',
-    });
+    startSession(c, session);
+    return c.json({ ok: true });
+  });
+
+  // ---------- or with email + password (set one in menu › Instellingen) ----------
+  app.post('/auth/login', async (c) => {
+    const b = await body(c), email = cleanEmail(b.email);
+    if (!EMAIL_RE.test(email) || typeof b.password !== 'string' || !b.password || b.password.length > 200) return c.json({ error: 'Vul je e-mailadres en wachtwoord in.' }, 400);
+    const r = await dir(c).login(email, b.password);
+    if ('error' in r) return c.json({ error: r.error === 'locked' ? 'Te vaak een verkeerd wachtwoord. Probeer het over een kwartier opnieuw.' : 'E-mailadres of wachtwoord klopt niet.' }, r.error === 'locked' ? 429 : 401);
+    startSession(c, r.session);
     return c.json({ ok: true });
   });
 
@@ -82,6 +94,13 @@ export function createApp<E extends Env>(platform: Platform<E>) {
     const dates = (Array.isArray(b.trips) ? b.trips : []).filter((t: any) => typeof t?.id === 'string' && DATE_RE.test(t?.aankomst));
     await dir(c).updateMe(u.id, naam, dates);
     return c.json(await dir(c).me({ ...u, naam: naam || u.naam }));
+  });
+
+  app.put('/me/password', signedIn, async (c) => {
+    const { password } = await body(c);
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD || password.length > 200) return c.json({ error: `Kies een wachtwoord van minstens ${MIN_PASSWORD} tekens.` }, 400);
+    await dir(c).setPassword(user(c).id, password);
+    return c.json({ ok: true });
   });
 
   /** a 15-minute link to sign in on another device */

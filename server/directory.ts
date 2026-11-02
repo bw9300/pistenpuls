@@ -14,6 +14,8 @@ export const DIRECTORY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS trip_members (trip_id TEXT NOT NULL, user_id TEXT NOT NULL, aankomst TEXT, PRIMARY KEY (trip_id, user_id))`,
   `CREATE TABLE IF NOT EXISTS invites (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL, used INTEGER)`,
   `CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, created INTEGER NOT NULL, last_used INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS passwords (user_id TEXT PRIMARY KEY, hash TEXT NOT NULL, updated INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS login_fails (email TEXT PRIMARY KEY, n INTEGER NOT NULL, first INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS trip_members_user ON trip_members (user_id)`,
   `CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)`,
 ];
@@ -22,6 +24,9 @@ const DAY = 86_400_000;
 export const INVITE_DAYS = 14;
 export const DEVICE_LINK_MINUTES = 15;
 export const SESSION_DAYS = 365;
+export const MIN_PASSWORD = 8;
+/** wrong passwords per email before a 15-minute pause */
+const MAX_FAILS = 10, FAIL_WINDOW = 15 * 60_000;
 
 // ---------- small helpers ----------
 const b64url = (a: Uint8Array) => btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -35,10 +40,30 @@ export async function hashToken(t: string) {
   const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)));
   return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+// passwords: PBKDF2-SHA256 (WebCrypto, so the same on Workers and Node; Workers allow at most 100k iterations)
+const PBKDF2_ITER = 100_000;
+const hex = (a: Uint8Array) => [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function pbkdf2(pw: string, salt: string, iter: number) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  return hex(new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: iter }, key, 256)));
+}
+export async function hashPassword(pw: string) {
+  const salt = randomToken(16);
+  return `pbkdf2$${PBKDF2_ITER}$${salt}$${await pbkdf2(pw, salt, PBKDF2_ITER)}`;
+}
+async function checkPassword(pw: string, stored: string) {
+  const [, iter, salt, h] = stored.split('$');
+  const got = await pbkdf2(pw, salt, Number(iter));
+  let d = got.length ^ h.length;
+  for (let i = 0; i < got.length; i++) d |= got.charCodeAt(i) ^ (h.charCodeAt(i) || 0);
+  return d === 0;
+}
+
 export const cleanName = (s: unknown) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, MAX_NAME);
 export const cleanEmail = (s: unknown) => String(s ?? '').trim().toLowerCase().slice(0, 200);
 
 export interface SessionUser { id: string; email: string; naam: string; isAdmin: boolean }
+export type LoginResult = { session: string } | { error: 'wrong' | 'locked' };
 
 export function directory(db: Db) {
   let ready: Promise<void> | null = null;
@@ -49,6 +74,13 @@ export function directory(db: Db) {
     const token = randomToken();
     await db.run('INSERT INTO invites (token_hash, user_id, expires) VALUES (?, ?, ?)', await hashToken(token), userId, Date.now() + ttlMs);
     return token;
+  }
+
+  async function newSession(userId: string) {
+    const session = randomToken();
+    await db.run('INSERT INTO sessions (token_hash, user_id, created, last_used) VALUES (?, ?, ?, ?)', await hashToken(session), userId, Date.now(), Date.now());
+    await db.run('UPDATE users SET last_seen = ? WHERE id = ?', Date.now(), userId);
+    return session;
   }
 
   return {
@@ -62,10 +94,30 @@ export function directory(db: Db) {
       const [inv] = await db.all('SELECT user_id, expires, used FROM invites WHERE token_hash = ?', h);
       if (!inv || inv.used || Number(inv.expires) < Date.now()) return null;
       await db.run('UPDATE invites SET used = ? WHERE token_hash = ?', Date.now(), h);
-      const session = randomToken();
-      await db.run('INSERT INTO sessions (token_hash, user_id, created, last_used) VALUES (?, ?, ?, ?)', await hashToken(session), inv.user_id, Date.now(), Date.now());
-      await db.run('UPDATE users SET last_seen = ? WHERE id = ?', Date.now(), inv.user_id);
-      return session;
+      return newSession(inv.user_id);
+    },
+
+    /** email + password → new session; too many wrong attempts on one email pause it for 15 minutes */
+    async login(email: string, password: string): Promise<LoginResult> {
+      await schema();
+      const [f] = await db.all('SELECT n, first FROM login_fails WHERE email = ?', email);
+      const fresh = f && Number(f.first) > Date.now() - FAIL_WINDOW;
+      if (fresh && Number(f.n) >= MAX_FAILS) return { error: 'locked' };
+      const [r] = await db.all('SELECT u.id, p.hash FROM users u JOIN passwords p ON p.user_id = u.id WHERE u.email = ?', email);
+      // always hash, so an unknown email takes as long as a wrong password
+      const ok = await checkPassword(password, r?.hash || 'pbkdf2$100000$x$');
+      if (!r || !ok) {
+        if (fresh) await db.run('UPDATE login_fails SET n = n + 1 WHERE email = ?', email);
+        else await db.run('INSERT OR REPLACE INTO login_fails (email, n, first) VALUES (?, 1, ?)', email, Date.now());
+        return { error: 'wrong' };
+      }
+      await db.run('DELETE FROM login_fails WHERE email = ?', email);
+      return { session: await newSession(r.id) };
+    },
+
+    async setPassword(userId: string, password: string) {
+      await schema();
+      await db.run('INSERT OR REPLACE INTO passwords (user_id, hash, updated) VALUES (?, ?, ?)', userId, await hashPassword(password), Date.now());
     },
 
     async sessionUser(sessionToken: string | undefined): Promise<SessionUser | null> {
@@ -98,7 +150,8 @@ export function directory(db: Db) {
     async me(u: SessionUser): Promise<Me> {
       await schema();
       const trips = await db.all('SELECT t.id, t.area, t.naam, t.aankomst AS reis, m.aankomst FROM trip_members m JOIN trips t ON t.id = m.trip_id WHERE m.user_id = ? ORDER BY COALESCE(m.aankomst, t.aankomst)', u.id);
-      return { user: u, trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomstReis: t.reis, aankomst: t.aankomst || null })) };
+      const hasPassword = (await db.all('SELECT 1 FROM passwords WHERE user_id = ?', u.id)).length > 0;
+      return { user: { ...u, hasPassword }, trips: trips.map((t) => ({ id: t.id, area: t.area, naam: t.naam, aankomstReis: t.reis, aankomst: t.aankomst || null })) };
     },
 
     async updateMe(userId: string, naam: string | null, dates: { id: string; aankomst: string }[]) {
@@ -165,7 +218,7 @@ export function directory(db: Db) {
       return true;
     },
     async deleteUser(id: string) {
-      for (const t of ['trip_members', 'sessions', 'invites']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, id);
+      for (const t of ['trip_members', 'sessions', 'invites', 'passwords']) await db.run(`DELETE FROM ${t} WHERE user_id = ?`, id);
       await db.run('DELETE FROM users WHERE id = ?', id);
     },
     /** a fresh personal invite; older unused ones stop working */
