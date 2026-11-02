@@ -1,0 +1,12 @@
+{
+  "id": "zillertal",
+  "naam": "Zillertal Arena",
+  "kort": "Zillertal Arena",
+  "regio": "Zell · Gerlos · Königsleiten · Hochkrimml",
+  "hallo": "Servus",
+  "groet": "Servus, Zillertal.",
+  "groetSub": "Van Zell am Ziller tot Hochkrimml, vier dorpen aan één skigebied.",
+  "van": "2026-12-19",
+  "bbox": [11.86, 47.18, 12.2, 47.275],
+  "meetstations": { "berg": "Wilde Krimml", "dal": "Durlaßboden" }
+}

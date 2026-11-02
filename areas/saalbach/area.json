@@ -1,0 +1,12 @@
+{
+  "id": "saalbach",
+  "naam": "Saalbach-Hinterglemm",
+  "kort": "Saalbach",
+  "regio": "Salzburgerland · Skicircus",
+  "hallo": "Griaß di",
+  "groet": "Servus, Saalbach.",
+  "groetSub": "Kaiserschmarrn op de hut staat al klaar.",
+  "van": "2027-02-06",
+  "bbox": [12.53, 47.345, 12.7, 47.42],
+  "meetstations": { "berg": "Hochhörndl", "dal": "Fieberbrunn-Reckmoos" }
+}
