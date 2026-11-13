@@ -74,12 +74,15 @@ export class Room {
       const msg = this.host.storage.addMessage({ from: me.id, naam: me.naam, text, ts: Date.now() });
       this.broadcast({ t: 'msg', msg });
     } else if (m.t === 'challenge') {
-      const kind = m.kind === 'ski' ? 'ski' : 'snowball';
+      const kind = m.kind === 'ski' || m.kind === 'apres' ? m.kind : 'snowball';
       const p = m.piste, piste = p && Number.isInteger(p.i) && p.i >= 0 && p.i < 100_000 ? { i: p.i, label: clean(p.label, 40) || 'piste' } : undefined;
-      const error = this.games.challenge({ id: me.id, naam: me.naam }, String(m.to), kind, piste);
+      const error = this.games.challenge({ id: me.id, naam: me.naam }, String(m.to), kind, piste, typeof m.song === 'string' ? m.song : undefined);
       if (error) this.send(conn, { t: 'error', error });
     } else if (m.t === 'answer') this.games.answer(me.id, String(m.game), !!m.accept);
-    else if (m.t === 'play') { if (m.a === 'ready' || m.a === 'throw' || m.a === 'duck' || m.a === 'push') this.games.play(me.id, String(m.game), m.a); }
+    else if (m.t === 'play') {
+      if (m.a === 'ready' || m.a === 'throw' || m.a === 'duck' || m.a === 'push') this.games.play(me.id, String(m.game), m.a);
+      else if (m.a === 'note' && m.note) this.games.play(me.id, String(m.game), m.a, { n: Number(m.note.n), j: Number(m.note.j) });
+    }
     else if (m.t === 'quit') this.games.quit(me.id, String(m.game));
   }
 

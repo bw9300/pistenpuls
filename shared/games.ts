@@ -1,13 +1,16 @@
 // Mini games between two people of the same trip, live. The room (server/games.ts) is the referee,
 // the browser (src/games.ts + one file per game) only shows it and sends button presses.
-// Rules per game: shared/snowball.ts, shared/ski.ts.
+// Rules per game: shared/snowball.ts, shared/ski.ts, shared/apresking.ts.
 
-export type GameKind = 'snowball' | 'ski';
+import type { Tally } from './apresking.ts';
+
+export type GameKind = 'snowball' | 'ski' | 'apres';
 
 /** for the chat lines: 'het sneeuwbalgevecht' / 'een skiwedstrijd' */
 export const GAME_WORDS: Record<GameKind, { de: string; een: string; icon: string }> = {
   snowball: { de: 'het sneeuwbalgevecht', een: 'een sneeuwbalgevecht', icon: '❄' },
   ski: { de: 'de skiwedstrijd', een: 'een skiwedstrijd', icon: '⛷' },
+  apres: { de: 'Après-ski King', een: 'een potje Après-ski King', icon: '🍺' },
 };
 
 export const INVITE_MS = 30_000;
@@ -32,10 +35,13 @@ export interface GameState {
   a: Player;
   b: Player;
   status: GameStatus;
-  /** snowball: hits; ski: taps so far */
+  /** snowball: hits; ski: taps so far; apres: points */
   score: Record<string, number>;
   /** ski */
   piste?: PisteRef;
+  /** apres: the song (id in shared/songs.ts) and everyone's combo and counts */
+  song?: string;
+  tally?: Record<string, Tally>;
   /** ms until the next step: answer deadline, start, or end of the game */
   left: number;
   winner?: string | null;
@@ -52,4 +58,7 @@ export type GameEvent =
   | { k: 'hit'; on: string }
   | { k: 'miss'; on: string };
 
-export type GameAction = 'ready' | 'throw' | 'duck' | 'push';
+export type GameAction = 'ready' | 'throw' | 'duck' | 'push' | 'note';
+
+/** apres 'note': which note (index in the song) and how it went (0 missed, 1 good, 2 perfect) */
+export interface NotePlay { n: number; j: number }

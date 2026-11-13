@@ -8,6 +8,7 @@ import { avatarUrl, onAvatars, startAvatars } from './avatars';
 import { createGames } from './games';
 import { SNOWBALL } from './snowball';
 import { SKIER, type Stage } from './ski';
+import { APRES } from './apresking';
 
 const $ = (id: string) => document.getElementById(id)!;
 const COLORS = ['#E0533D', '#F0B45A', '#5B9BD5', '#7FB77E', '#B08BD9', '#E58FB1', '#4FB3B0'];
@@ -65,7 +66,8 @@ export function startLiveUI(opts: {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ch]');
     if (!b) return;
     setOpen(false);
-    games.challenge(cur(), b.dataset.ch!, b.dataset.naam!, b.dataset.kind === 'ski' ? 'ski' : 'snowball');
+    const kind = b.dataset.kind === 'ski' || b.dataset.kind === 'apres' ? b.dataset.kind : 'snowball';
+    games.challenge(cur(), b.dataset.ch!, b.dataset.naam!, kind);
   });
   who.onclick = () => setOpen(true);
   addEventListener('pointerdown', (e) => { if (open && !panel.contains(e.target as Node) && !btn.contains(e.target as Node) && !who.contains(e.target as Node)) setOpen(false); });
@@ -147,7 +149,7 @@ export function startLiveUI(opts: {
   /** the snowball after someone's name: challenge them (only when they're online) */
   const challengeBtn = (l: Live, id: string, naam: string) =>
     id !== l.state.me && id !== SYSTEM && l.state.online.some((o) => o.id === id)
-      ? `<span class="sbchs">${([['snowball', SNOWBALL, 'een sneeuwbalgevecht'], ['ski', SKIER, 'een skiwedstrijd']] as const).map(([k, icon, what]) =>
+      ? `<span class="sbchs">${([['snowball', SNOWBALL, 'een sneeuwbalgevecht'], ['ski', SKIER, 'een skiwedstrijd'], ['apres', APRES, 'een potje Après-ski King']] as const).map(([k, icon, what]) =>
           `<button type="button" class="sbch" data-ch="${esc(id)}" data-kind="${k}" data-naam="${esc(naam)}" title="Daag ${esc(naam)} uit voor ${what}" aria-label="Daag ${esc(naam)} uit voor ${what}">${icon}</button>`).join('')}</span>`
       : '';
   const msgHTML = (l: Live, m: ChatMessage, prev?: ChatMessage) => {

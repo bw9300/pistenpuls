@@ -72,12 +72,27 @@ Uitdaging, antwoord en uitslag komen als regel in de chat. De kamer van de reis 
 
 - **Sneeuwbalgevecht**: twee knoppen, **Gooien** en **Bukken** (of spatie / pijl omlaag). Wie het eerst 3 keer raakt wint.
 - **Skiwedstrijd**: op de 3D-kaart, over een willekeurige piste van 0,5–3 km. Eén knop: zo snel mogelijk tikken (of spatie). Wie het eerst beneden is wint.
+- **Après-ski King**: een muziekspel. Bier, Aperol en Jäger glijden op de maat over de bar; tik ze (knop, de baan zelf, of ← ↓ →) als ze op het bierviltje staan.
+  Perfect (±60 ms) 100, goed (±130 ms) 50 punten; elke 10 op rij een vermenigvuldiger erbij (tot ×4). Mis tikken kost niets. Bovenaan zie je de score van de ander.
+  Elke browser speelt het nummer en beoordeelt zijn eigen tikken tegen de klok van de muziek zoals je die hoort (de kamer erbij halen zou elke tik te laat maken);
+  de kamer start beide tegelijk, controleert of een oordeel kan en houdt de score bij. Tikt iemand steeds te laat of te vroeg (bijv. Bluetooth), dan schuift dat apparaat de noten de volgende keer mee.
 
-- `shared/games.ts`: berichten en toestand van een spel; `shared/snowball.ts`, `shared/ski.ts`: regels en timing
+- `shared/games.ts`: berichten en toestand van een spel; `shared/snowball.ts`, `shared/ski.ts`, `shared/apresking.ts`: regels en timing
 - `server/games.ts`: de scheidsrechter, draait in de kamer van de reis
-- `src/games.ts`: spel kiezen, uitnodiging, wachten; `src/snowball.ts` en `src/ski.ts`: de spelschermen
+- `src/games.ts`: spel kiezen, uitnodiging, wachten; `src/snowball.ts`, `src/ski.ts` en `src/apresking.ts`: de spelschermen
 
 Een nieuw spel: een `GameKind` erbij in `shared/games.ts`, de regels in `server/games.ts`, een scherm in `src/`.
+
+#### Een nummer toevoegen aan Après-ski King
+
+```sh
+npm run song:add -- --id schuhe --file ~/Downloads/schuhe.mp3 --titel "Schuhe" [--artiest "…"] --start 4.9
+```
+
+Zet `audio.mp3` (opnieuw gecodeerd) en `song.json` in `songs/<id>/`, daarna één regel in `SONGS` in `shared/songs.ts`.
+`--start` is de eerste noot in seconden (de drop). De tool zoekt het tempo en de tellen en zet de sterkste klanken als noten op de tel
+(een paar op de halve tel), ±1,7 per seconde (`--dichtheid`); de toonhoogte kiest de baan. Klopt het tempo niet, geef dan `--bpm` mee.
+Zonder `--file` maakt hij alleen de noten opnieuw. Kort en krachtig werkt het best: een fragment van ongeveer een minuut.
 
 ## Een skigebied toevoegen
 

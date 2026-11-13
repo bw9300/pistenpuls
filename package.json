@@ -11,6 +11,7 @@
     "deploy": "npm run build && wrangler deploy",
     "deploy:preview": "npm run build && wrangler deploy --env preview",
     "area:add": "tsx tools/add-area.ts",
+    "song:add": "tsx tools/song-add.ts",
     "admin:invite": "tsx tools/admin-invite.ts"
   },
   "dependencies": {

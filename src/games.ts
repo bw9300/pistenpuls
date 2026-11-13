@@ -1,5 +1,5 @@
 // Mini games in the browser, around the game itself: choosing a game, the invite, waiting for an answer, loading.
-// The game screens are in snowball.ts and ski.ts. The room is the referee (server/games.ts).
+// The game screens are in snowball.ts, ski.ts and apresking.ts. The room is the referee (server/games.ts).
 // Only the tab that challenged or accepted plays; other tabs of the same person just close their dialog.
 import { GAME_WORDS, type GameEvent, type GameKind, type GameState } from '../shared/games';
 import { WIN_HITS } from '../shared/snowball';
@@ -7,13 +7,16 @@ import type { Live } from './live';
 import { esc } from './settings';
 import { SNOWBALL, snowballScreen } from './snowball';
 import { pickPiste, skiScreen, SKIER, type Stage } from './ski';
+import { APRES, apresScreen, pickSong, songTitle, unlockAudio } from './apresking';
 
-const ICON: Record<GameKind, string> = { snowball: SNOWBALL, ski: SKIER };
+const ICON: Record<GameKind, string> = { snowball: SNOWBALL, ski: SKIER, apres: APRES };
 const big = (k: GameKind, extra = '') => ICON[k].replace(/class="(\w+)"/, `class="$1 big${extra}"`);
 const RULES: Record<GameKind, (g: GameState) => string> = {
   snowball: () => `Wie het eerst ${WIN_HITS} keer raakt, wint.`,
   ski: (g) => `Een race naar beneden${g.piste ? ` over een ${esc(g.piste.label)}` : ''}. Tik zo snel je kunt: wie het eerst beneden is, wint.`,
+  apres: (g) => `Bier, Aperol en Jäger glijden over de bar op de maat van <b>${esc(songTitle(g.song))}</b>. Tik ze als ze op je bierviltje staan: wie de meeste punten heeft, is Après-ski King.`,
 };
+const LOADING: Record<GameKind, string> = { snowball: 'Sneeuwbalgevecht laden', ski: 'Skiwedstrijd laden', apres: 'Après-ski King laden' };
 
 type Screen = { update(g: GameState, ev?: GameEvent): void; stop(): void };
 
@@ -59,7 +62,7 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
     }, 10_000);
   }
 
-  function challenge(live: Live | undefined, to: string, naam: string, kind: GameKind) {
+  function challenge(live: Live | undefined, to: string, naam: string, kind: GameKind, song?: string) {
     if (!live || live.state.status !== 'online') { close(); return opts.toast(`${ICON[kind]}<span>Geen verbinding, probeer het zo nog eens.</span>`, 4000); }
     let piste;
     if (kind === 'ski') {
@@ -67,8 +70,9 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
       piste = w && pickPiste(w);
       if (!piste) { close(); return opts.toast(`${SKIER}<span>${w ? 'Dit skigebied heeft geen geschikte piste voor een wedstrijd.' : 'De kaart is nog aan het laden. Probeer het zo nog eens.'}</span>`, 5000); }
     }
+    if (kind === 'apres') { song ||= pickSong(); unlockAudio(song); } // this tap may start the music later
     pending = { live, to, naam };
-    live.challenge(to, kind, piste);
+    live.challenge(to, kind, piste, kind === 'apres' ? song : undefined);
     showLoading('', kind, `Uitdaging naar ${esc(naam)} versturen`);
   }
 
@@ -80,7 +84,7 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
       <p class="sbleft" data-left></p>
       <div class="sbrow"><button type="button" data-no>Nee, nu niet</button><button type="button" class="primary" data-yes>Ja, doe ik!</button></div></div>`);
     countdown(b, g.left);
-    b.querySelector<HTMLButtonElement>('[data-yes]')!.onclick = () => { mine.add(g.id); live.answer(g.id, true); showLoading(g.id, g.kind, `${g.kind === 'ski' ? 'Skiwedstrijd' : 'Sneeuwbalgevecht'} laden`); };
+    b.querySelector<HTMLButtonElement>('[data-yes]')!.onclick = () => { mine.add(g.id); if (g.kind === 'apres') unlockAudio(g.song); live.answer(g.id, true); showLoading(g.id, g.kind, LOADING[g.kind]); };
     b.querySelector<HTMLButtonElement>('[data-no]')!.onclick = () => { live.answer(g.id, false); close(); };
     b.querySelector<HTMLButtonElement>('[data-yes]')!.focus();
     navigator.vibrate?.([120, 80, 120]);
@@ -88,7 +92,7 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
   function showWaiting(live: Live, g: GameState) {
     const b = overlay(g.id, `<div class="sbcard">${big(g.kind)}
       <h2>Je hebt ${esc(g.b.naam)} uitgedaagd</h2>
-      <p>${g.piste ? `${esc(g.piste.label[0].toUpperCase() + g.piste.label.slice(1))}. ` : ''}Even wachten tot ${esc(g.b.naam)} ja zegt…</p>
+      <p>${g.piste ? `${esc(g.piste.label[0].toUpperCase() + g.piste.label.slice(1))}. ` : g.song ? `Op ${esc(songTitle(g.song))}. ` : ''}Even wachten tot ${esc(g.b.naam)} ja zegt…</p>
       <p class="sbleft" data-left></p>
       <div class="sbrow"><button type="button" data-cancel>Toch niet</button></div></div>`);
     countdown(b, g.left);
@@ -128,8 +132,9 @@ export function createGames(opts: { toast(html: string, ms: number): void; stage
     }
     if (!screen) {
       const b = overlay(g.id, '');
-      const done = () => { mine.delete(g.id); close(); }, again = () => { close(); challenge(live, other.id, other.naam, g.kind); };
-      screen = g.kind === 'ski' && opts.stage ? skiScreen(b, live, g, opts.stage, done, again) : snowballScreen(b, live, g, done, again);
+      const done = () => { mine.delete(g.id); close(); }, again = () => { close(); challenge(live, other.id, other.naam, g.kind, g.song); };
+      screen = g.kind === 'ski' && opts.stage ? skiScreen(b, live, g, opts.stage, done, again)
+        : g.kind === 'apres' ? apresScreen(b, live, g, done, again) : snowballScreen(b, live, g, done, again);
     }
     screen.update(g, ev);
     if (g.status === 'over') mine.delete(g.id);

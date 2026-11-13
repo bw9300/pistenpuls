@@ -1,6 +1,6 @@
 // Connection to one trip's room: who is online, who was here, messages. Reconnects by itself.
 // You are who your session says (the server checks it); the browser sends no identity.
-import type { GameAction, GameEvent, GameKind, GameState, PisteRef } from '../shared/games';
+import type { GameAction, GameEvent, GameKind, GameState, NotePlay, PisteRef } from '../shared/games';
 import { type ChatMessage, type ClientMsg, type Member, type OnlineMember, type ServerMsg, type Viewing } from '../shared/live';
 
 export type LiveStatus = 'connecting' | 'online' | 'offline';
@@ -27,9 +27,9 @@ export interface Live {
   state: LiveState;
   say(text: string): void;
   /** snowball fight */
-  challenge(to: string, kind: GameKind, piste?: PisteRef): void;
+  challenge(to: string, kind: GameKind, piste?: PisteRef, song?: string): void;
   answer(game: string, accept: boolean): void;
-  play(game: string, a: GameAction): void;
+  play(game: string, a: GameAction, note?: NotePlay): void;
   quit(game: string): void;
   /** what's on screen now; this connection's trip counts as 'visible' only when it's that one */
   setActive(trip: string | null): void;
@@ -95,9 +95,9 @@ export function connectLive(opts: { apiBase: string; trip: string; active: strin
     trip: opts.trip,
     state,
     say: (text) => send({ t: 'msg', text }),
-    challenge: (to, kind, piste) => send({ t: 'challenge', to, kind, piste }),
+    challenge: (to, kind, piste, song) => send({ t: 'challenge', to, kind, piste, song }),
     answer: (game, accept) => send({ t: 'answer', game, accept }),
-    play: (game, a) => send({ t: 'play', game, a }),
+    play: (game, a, note) => send({ t: 'play', game, a, note }),
     quit: (game) => send({ t: 'quit', game }),
     setActive: (t) => { active = t; send({ t: 'view', viewing: viewing() }); },
     close: () => { closed = true; clearTimeout(retryT); clearInterval(pingT); document.removeEventListener('visibilitychange', onVis); ws?.close(); },

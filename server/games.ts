@@ -2,9 +2,11 @@
 // the browsers only press buttons. Games live in memory: they're short, and the pending timers keep
 // a Durable Object awake while one is going on.
 import type { ServerMsg } from '../shared/live.ts';
-import { COUNTDOWN_MS, GAME_WORDS, GONE_MS, INVITE_MS, LOAD_MS, type GameAction, type GameEnd, type GameEvent, type GameKind, type GameState, type PisteRef, type Player } from '../shared/games.ts';
+import { COUNTDOWN_MS, GAME_WORDS, GONE_MS, INVITE_MS, LOAD_MS, type GameAction, type GameEnd, type GameEvent, type GameKind, type GameState, type NotePlay, type PisteRef, type Player } from '../shared/games.ts';
 import { DUCK_COOLDOWN_MS, DUCK_MS, FLIGHT_MS, GAME_MS, RELOAD_MS, WIN_HITS } from '../shared/snowball.ts';
 import { MIN_TAP_MS, SKI_MS, SKI_TAPS } from '../shared/ski.ts';
+import { EARLY_MS, END_PAD_MS, newTally, tally, type Judgement, type Tally } from '../shared/apresking.ts';
+import { songById } from '../shared/songs.ts';
 
 export interface GamesHost {
   /** the name of someone who is in the room now, else null */
@@ -27,10 +29,15 @@ interface Game extends Omit<GameState, 'left'> {
   lastTap: Record<string, number>;
   dirty: boolean;
   ready: string[];
+  // apres
+  tally: Record<string, Tally>;
+  /** the first note not judged yet */
+  next: Record<string, number>;
 }
 
 const ACTIVE = new Set(['invited', 'loading', 'countdown', 'playing']);
-const LENGTH: Record<GameKind, number> = { snowball: GAME_MS, ski: SKI_MS };
+const length = (g: Game) => g.kind === 'apres' ? songById(g.song)!.duur + END_PAD_MS : g.kind === 'ski' ? SKI_MS : GAME_MS;
+const pts = (n: number) => n.toLocaleString('nl-NL');
 const secs = (ms: number) => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
 
 export class Games {
@@ -45,22 +52,25 @@ export class Games {
     return null;
   }
 
-  challenge(from: Player, to: string, kind: GameKind, piste?: PisteRef): string | null {
+  challenge(from: Player, to: string, kind: GameKind, piste?: PisteRef, song?: string): string | null {
     if (to === from.id) return 'Jezelf uitdagen gaat lastig.';
     const naam = this.host.online(to);
     if (!naam) return 'Die is nu niet online.';
     if (this.gameOf(from.id)) return 'Je bent al met een spelletje bezig.';
     if (this.gameOf(to)) return `${naam} is al met een spelletje bezig.`;
     if (kind === 'ski' && !piste) return 'Geen piste gekozen.';
+    if (kind === 'apres' && !songById(song)) return 'Dat nummer kennen we niet.';
     const g: Game = {
       id: Date.now().toString(36) + (this.n++).toString(36), kind, a: from, b: { id: to, naam }, status: 'invited',
       score: { [from.id]: 0, [to]: 0 }, piste: kind === 'ski' ? piste : undefined, until: Date.now() + INVITE_MS, started: 0,
       timers: new Set(), reloadAt: {}, duckUntil: {}, duckAt: {}, lastTap: {}, dirty: false, ready: [],
+      song: kind === 'apres' ? song : undefined, tally: { [from.id]: newTally(), [to]: newTally() }, next: { [from.id]: 0, [to]: 0 },
     };
     this.games.set(g.id, g);
     this.later(g, INVITE_MS, () => g.status === 'invited' && this.finish(g, null, 'expired'));
     const w = GAME_WORDS[kind];
-    this.host.system(`${w.icon} ${from.naam} daagt ${naam} uit voor ${w.een}${piste ? ` (${piste.label})` : ''}!`);
+    const what = piste ? ` (${piste.label})` : kind === 'apres' ? ` (${songById(song)!.titel})` : '';
+    this.host.system(`${w.icon} ${from.naam} daagt ${naam} uit voor ${w.een}${what}!`);
     this.send(g);
     return null;
   }
@@ -71,7 +81,7 @@ export class Games {
     if (!accept) return this.finish(g, null, 'declined');
     g.status = 'loading';
     g.until = Date.now() + LOAD_MS;
-    this.host.system(`${GAME_WORDS[g.kind].icon} ${g.b.naam} neemt de uitdaging van ${g.a.naam} aan. ${g.kind === 'ski' ? 'Daar gaan ze!' : 'Gooien maar!'}`);
+    this.host.system(`${GAME_WORDS[g.kind].icon} ${g.b.naam} neemt de uitdaging van ${g.a.naam} aan. ${{ ski: 'Daar gaan ze!', snowball: 'Gooien maar!', apres: 'Proost!' }[g.kind]}`);
     this.send(g);
     // someone's browser is slow: start anyway
     this.later(g, LOAD_MS, () => g.status === 'loading' && this.countdown(g));
@@ -92,22 +102,24 @@ export class Games {
     this.later(g, COUNTDOWN_MS, () => {
       g.status = 'playing';
       g.started = Date.now();
-      g.until = g.started + LENGTH[g.kind];
+      g.until = g.started + length(g);
       this.send(g);
-      if (g.kind === 'ski') this.tick(g);
-      this.later(g, LENGTH[g.kind], () => {
+      if (g.kind !== 'snowball') this.tick(g);
+      this.later(g, length(g), () => {
+        if (g.kind === 'apres') for (const p of [g.a.id, g.b.id]) this.miss(g, p, songById(g.song)!.notes.length);
         const [sa, sb] = [g.score[g.a.id], g.score[g.b.id]];
-        this.finish(g, sa === sb ? null : sa > sb ? g.a.id : g.b.id, 'time');
+        this.finish(g, sa === sb ? null : sa > sb ? g.a.id : g.b.id, g.kind === 'apres' ? 'finish' : 'time');
       });
     });
   }
 
-  play(userId: string, id: string, a: GameAction) {
+  play(userId: string, id: string, a: GameAction, note?: NotePlay) {
     const g = this.games.get(id);
     if (!g || (g.a.id !== userId && g.b.id !== userId)) return;
     if (a === 'ready') return this.ready(g, userId);
     if (g.status !== 'playing') return;
     if (g.kind === 'ski') { if (a === 'push') this.push(g, userId); return; }
+    if (g.kind === 'apres') { if (a === 'note' && note) this.note(g, userId, note); return; }
     const now = Date.now(), other = g.a.id === userId ? g.b.id : g.a.id;
     if (a === 'duck') {
       if (now < (g.duckAt[userId] || 0)) return;
@@ -144,6 +156,23 @@ export class Games {
       if (g.dirty) { g.dirty = false; this.send(g); }
       this.tick(g);
     });
+  }
+
+  // ---------- apres: the browser judges each note, in order; the room checks it could be and counts ----------
+  private note(g: Game, userId: string, { n, j }: NotePlay) {
+    const notes = songById(g.song)!.notes;
+    if (!Number.isInteger(n) || n < g.next[userId] || n >= notes.length || (j !== 0 && j !== 1 && j !== 2)) return;
+    // a hit before the note could have been on screen: not possible
+    if (j && Date.now() - g.started < notes[n][0] - EARLY_MS) return;
+    this.miss(g, userId, n); // skipped notes count as missed
+    tally(g.tally[userId], j as Judgement);
+    g.next[userId] = n + 1;
+    g.score[userId] = g.tally[userId].score;
+    g.dirty = true;
+  }
+  private miss(g: Game, userId: string, upTo: number) {
+    for (; g.next[userId] < upTo; g.next[userId]++) tally(g.tally[userId], 0);
+    g.dirty = true;
   }
 
   quit(userId: string, id: string) {
@@ -190,12 +219,15 @@ export class Games {
     const score = (w: string) => `${g.score[w]}–${g.score[w === g.a.id ? g.b.id : g.a.id]}`;
     const { de } = GAME_WORDS[g.kind];
     const ski = g.kind === 'ski';
+    const king = (w: string) => `👑 ${naam(w)} is Après-ski King met ${pts(g.score[w])} punten! ${naam(loser!)} haalde er ${pts(g.score[loser!])}.`;
     this.host.system({
       declined: `${g.b.naam} slaat de uitdaging van ${g.a.naam} af.`,
       expired: `${g.b.naam} reageerde niet op de uitdaging van ${g.a.naam}.`,
       cancelled: `${g.a.naam} trekt de uitdaging aan ${g.b.naam} in.`,
       score: winner ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)} met ${score(winner)}!` : '',
-      finish: winner ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)}: in ${secs(g.time || 0)} beneden!` : '',
+      finish: g.kind === 'apres'
+        ? (winner ? king(winner) : `Après-ski King tussen ${g.a.naam} en ${g.b.naam} eindigt gelijk: allebei ${pts(g.score[g.a.id])} punten.`)
+        : winner ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)}: in ${secs(g.time || 0)} beneden!` : '',
       time: winner
         ? `🏆 ${naam(winner)} wint ${de} van ${naam(loser!)} ${ski ? '(verst gekomen)' : `met ${score(winner)} (tijd op)`}.`
         : `${de[0].toUpperCase() + de.slice(1)} tussen ${g.a.naam} en ${g.b.naam} eindigt gelijk${ski ? '' : ` (${g.score[g.a.id]}–${g.score[g.b.id]})`}.`,
@@ -211,7 +243,8 @@ export class Games {
 
   private view(g: Game): GameState {
     const { id, kind, a, b, status, score, piste, winner, end, time, ready } = g;
-    return { id, kind, a, b, status, score, piste, winner, end, time, ready, left: Math.max(0, g.until - Date.now()) };
+    const apres = kind === 'apres' ? { song: g.song, tally: g.tally } : {};
+    return { id, kind, a, b, status, score, piste, winner, end, time, ready, ...apres, left: Math.max(0, g.until - Date.now()) };
   }
 
   private send(g: Game, ev?: GameEvent) {
