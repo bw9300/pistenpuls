@@ -1,4 +1,4 @@
-// The admin panel: trips, people (who goes on which trip), personal links, who's online.
+// The admin panel: trips, people (who goes on which trip), personal links, who was online when.
 // Opens with 5 quick clicks on the logo, only for admins. The server checks every request too.
 import type { AdminOnline, AdminState, AdminTrip, AdminUser, Me } from '../shared/api';
 import { AREAS } from './areas';
@@ -9,12 +9,12 @@ let box: HTMLElement | null = null, tab: 'reizen' | 'personen' | 'online' = 'per
 const areaName = (id: string) => AREAS.find((a) => a.id === id)?.naam || id;
 const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
 function seen(ts: number | null) {
-  if (!ts) return 'nog nooit';
+  if (!ts) return 'nog geen status';
   const s = (Date.now() - ts) / 1000;
-  if (s < 600) return 'net';
+  if (s < 120) return 'net';
   if (s < 3600) return `${Math.round(s / 60)} min geleden`;
   if (s < 86400) return `${Math.round(s / 3600)} uur geleden`;
-  return new Date(ts).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+  return new Date(ts).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 /** 5 quick clicks on the logo open the panel (admins only) */
@@ -62,7 +62,7 @@ function render() {
   const d = data!;
   box!.innerHTML = `<div class="acard">
     <div class="ahead"><h2>Beheer</h2><button type="button" class="aclose" data-close aria-label="Sluiten">✕</button></div>
-    <div class="mtabs" role="tablist">${(['personen', 'reizen', 'online'] as const).map((t) => `<button type="button" role="tab" data-tab="${t}" aria-selected="${tab === t}">${{ personen: `Personen (${d.users.length})`, reizen: `Reizen (${d.trips.length})`, online: 'Nu online' }[t]}</button>`).join('')}</div>
+    <div class="mtabs" role="tablist">${(['personen', 'reizen', 'online'] as const).map((t) => `<button type="button" role="tab" data-tab="${t}" aria-selected="${tab === t}">${{ personen: `Personen (${d.users.length})`, reizen: `Reizen (${d.trips.length})`, online: 'Laatst online' }[t]}</button>`).join('')}</div>
     <div class="abody">${tab === 'personen' ? people(d) : tab === 'reizen' ? trips(d) : '<p class="msrc">Laden…</p>'}</div>
   </div>`;
   wire();
@@ -92,7 +92,7 @@ function people(d: AdminState) {
       <i class="aface">${u.avatar ? `<img src="/api/avatar/${encodeURIComponent(u.id)}?v=${u.avatar}" alt="">` : esc((u.naam.trim()[0] || '?').toUpperCase())}</i>
       <div class="amain"><b>${esc(u.naam)}${u.isAdmin ? ' <span class="atag">admin</span>' : ''}${u.resetRequested ? ' <span class="atag areset">wachtwoord vergeten: stuur een nieuwe link</span>' : ''}</b><small>${esc(u.email)}</small>
         <div class="achips">${u.trips.map((t) => `<span>${esc(tripName(t))}</span>`).join('') || '<em>geen reis</em>'}</div>
-        <small>laatst gezien ${seen(u.lastSeen)} · ${u.sessions} ${u.sessions === 1 ? 'apparaat' : 'apparaten'}${u.invitePending ? ' · link verstuurd, nog niet geopend' : ''}</small></div>
+        <small>laatst online ${seen(u.lastSeen)} · ${u.sessions} ${u.sessions === 1 ? 'apparaat' : 'apparaten'}${u.invitePending ? ' · link verstuurd, nog niet geopend' : ''}</small></div>
       <div class="aacts"><button type="button" data-act="link">Link</button><button type="button" data-act="edit">Bewerk</button><button type="button" data-act="more" aria-label="Meer">⋯</button></div>
       <div class="aout"></div></li>`).join('');
   return `<details class="anew"${d.users.length ? '' : ' open'}><summary>+ Persoon toevoegen</summary>${personForm(d, null)}<div class="aout" data-new-out></div></details>
@@ -120,17 +120,29 @@ function trips(d: AdminState) {
     <p class="msrc">Een nieuw skigebied toevoegen gaat met <code>npm run area:add</code>; daarna staat het hier in de lijst.</p>`;
 }
 
-// ---------- online ----------
+// ---------- last online: everyone, who's on now at the top ----------
 async function loadOnline() {
   if (tab !== 'online' || !box || box.hidden) return;
   const body = box.querySelector('.abody');
   try {
-    const on = await api<AdminOnline[]>('/admin/online');
+    const [on, st] = await Promise.all([api<AdminOnline[]>('/admin/online'), api<AdminState>('/admin/state')]);
     if (tab !== 'online' || !body) return;
-    body.innerHTML = data!.trips.map((t) => {
-      const o = on.find((x) => x.trip === t.id)?.online || [];
-      return `<section class="aonline"><h4>${esc(t.naam)} · ${o.length} online</h4>${o.length ? `<ul class="people">${o.map((p) => `<li><span><b>${esc(p.naam)}</b><small>${p.visible ? 'kijkt mee' : 'op de achtergrond of andere reis'}</small></span></li>`).join('')}</ul>` : '<p class="msrc">Niemand.</p>'}</section>`;
-    }).join('') || '<p class="msrc">Nog geen reizen.</p>';
+    data = st;
+    // per person: on which trips they're connected now, and whether one of them is on screen
+    const now = new Map<string, { trips: string[]; visible: boolean }>();
+    for (const o of on) for (const p of o.online) {
+      const n = now.get(p.id) || { trips: [], visible: false };
+      n.trips.push(st.trips.find((t) => t.id === o.trip)?.naam || '?');
+      n.visible ||= p.visible;
+      now.set(p.id, n);
+    }
+    const users = [...st.users].sort((a, b) => +now.has(b.id) - +now.has(a.id) || (b.lastSeen ?? -1) - (a.lastSeen ?? -1));
+    body.innerHTML = users.length ? `<ul class="alist">${users.map((u) => {
+      const n = now.get(u.id);
+      const status = n ? `<span class="atag anow">nu online</span> ${n.visible ? 'kijkt mee' : 'op de achtergrond'} · ${esc(n.trips.join(', '))}` : u.lastSeen ? `laatst online ${seen(u.lastSeen)}` : 'nog geen status';
+      return `<li class="aitem"><i class="aface">${u.avatar ? `<img src="/api/avatar/${encodeURIComponent(u.id)}?v=${u.avatar}" alt="">` : esc((u.naam.trim()[0] || '?').toUpperCase())}</i>
+        <div class="amain"><b>${esc(u.naam)}</b><small>${status}</small></div></li>`;
+    }).join('')}</ul>` : '<p class="msrc">Nog niemand.</p>';
   } catch (e) { if (body) body.innerHTML = `<p class="werr">${esc((e as Error).message)}</p>`; }
 }
 

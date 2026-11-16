@@ -329,7 +329,7 @@ body.wizard .toasts,body.wizard .chat{display:none}
 .achips span{font-size:12px;background:#2B4A66;border-radius:999px;padding:2px 9px}
 .achips em{font-size:12px;color:var(--lantaarn);font-style:normal}
 .aacts{display:flex;gap:6px}
-.aonline{background:#162636;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.atag.anow{background:#3FAE6A;color:var(--snow)}
 body.adminopen .menubtn,body.adminopen .menu,body.adminopen .toasts{visibility:hidden}
 @media (max-width:560px){.arow{grid-template-columns:1fr}.aitem{grid-template-columns:1fr}.acard{padding:16px}}
 /* scene pin (click the current scene again); yellow = pinned, for scenes and trips alike */

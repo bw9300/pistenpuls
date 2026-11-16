@@ -45,7 +45,7 @@ Iedereen kiest zelf zijn aankomstdatum per reis (bij de eerste keer inloggen, la
   en het verzoek bij de persoon in Beheer, maakt een link en stuurt die (bijv. via WhatsApp). Wie die link opent, kiest meteen een nieuw wachtwoord.
 - **Profielfoto**: menu › Instellingen › *Foto maken*. Alleen met de camera (geen upload), met een hoofdsilhouet als richtlijn; 320×320 JPEG in de tabel `avatars`.
   Alleen zichtbaar voor wie een reis met je deelt (`/api/avatar/<id>`). Een admin kan een foto uploaden of verwijderen (Beheer › Personen › ⋯).
-- **Beheer**: 5× snel op het logo klikken (alleen voor admins). Personen toevoegen, ze aan reizen koppelen, links maken, reizen aanmaken, wie er online is.
+- **Beheer**: 5× snel op het logo klikken (alleen voor admins). Personen toevoegen, ze aan reizen koppelen, links maken, reizen aanmaken, wie wanneer voor het laatst online was (wie nu online is bovenaan).
 - **De allereerste admin-link** maak je op de command line:
   ```sh
   npm run admin:invite -- --email jij@example.com --naam Jij --admin --target prod   # of preview / local

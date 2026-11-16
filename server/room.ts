@@ -34,6 +34,8 @@ export interface RoomHost {
   /** all open connections of this room (including ones that haven't said hello yet) */
   connections(): Conn[];
   storage: RoomStorage;
+  /** someone left: their 'last online' for the admin panel becomes now */
+  left?(id: string): void;
 }
 
 const clean = (s: unknown, max: number) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
@@ -92,6 +94,7 @@ export class Room {
     if (!me?.ready) return;
     // still online in another tab? then 'last seen' is now anyway, harmless
     this.host.storage.saveMember({ id: me.id, naam: me.naam, lastSeen: Date.now() });
+    this.host.left?.(me.id);
     this.broadcastPresence();
     if (!this.online().some((o) => o.id === me.id)) this.games.gone(me.id);
   }

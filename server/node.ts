@@ -32,7 +32,7 @@ function getRoom(name: string) {
   let r = rooms.get(name);
   if (!r) {
     const conns = new Set<Conn & { ws: WebSocket }>();
-    r = { conns, room: new Room({ connections: () => [...conns], storage: sqlStorage(name, sql) }) };
+    r = { conns, room: new Room({ connections: () => [...conns], storage: sqlStorage(name, sql), left: (id) => void dir.seen(id).catch(() => {}) }) };
     rooms.set(name, r);
   }
   return r;

@@ -66,6 +66,7 @@ export class LiveRoom extends DurableObject<Env> {
     this.room = new Room({
       connections: () => ctx.getWebSockets().filter((ws) => ws.readyState === WebSocket.OPEN).map(conn),
       storage,
+      left: (id) => ctx.waitUntil(dir(env).seen(id).catch(() => {})),
     });
     // keep-alive pings are answered without waking the object
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
