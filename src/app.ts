@@ -384,10 +384,10 @@ function fit(){VW=innerWidth;VH=innerHeight;
 // top bar: never wrap; when it doesn't fit, drop the least important bits one by one (tb1…tb5, see style.css)
 const topbar=document.querySelector('.topbar'),TB=5;let tbQueued=false;
 function fitTopbar(){tbQueued=false;for(let i=1;i<=TB;i++)topbar.classList.remove('tb'+i);
-  // phone: brand and clock share the first row; drop the greeting, then the weather, until the brand fits next to the clock
-  if(MOB){const brand=topbar.querySelector('.brand'),clock=topbar.querySelector('.clock');brand.classList.remove('bf1','bf2');
+  // phone: the brand has the first row to itself; drop the greeting, then the weather, until it fits
+  if(MOB){const brand=topbar.querySelector('.brand');brand.classList.remove('bf1','bf2');
     // measure the brand at its natural width (.measure), not shrunk with an ellipsis
-    const over=()=>{brand.classList.add('measure');const w=brand.offsetWidth;brand.classList.remove('measure');return w>topbar.clientWidth-clock.offsetWidth-16};
+    const over=()=>{brand.classList.add('measure');const w=brand.offsetWidth;brand.classList.remove('measure');return w>topbar.clientWidth};
     for(let i=1;i<=2&&over();i++)brand.classList.add('bf'+i);return}
   const over=()=>{const kids=[...topbar.children].flatMap(e=>getComputedStyle(e).display==='contents'?[...e.children]:[e]).filter(e=>!e.hidden&&e.offsetWidth);
     return kids.reduce((w,e)=>w+e.offsetWidth,0)+(kids.length-1)*16>topbar.clientWidth};
