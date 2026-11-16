@@ -238,7 +238,7 @@ function fillTrip(T){
   $('groet').textContent=NAAM?`${T.hallo||'Servus'}, ${NAAM}.`:T.groet;$('groetSub').textContent=T.groetSub;
   const wk=Math.floor(dt/7);$('weeks').textContent=dt<=0?'Nu!':wk>1?wk+' weken':dt+(dt===1?' dag':' dagen');
   $('mkName').textContent=`${w.summitName||'Bergstation'} · ${nl(w.topAlt)} m`;
-  $('topCount').innerHTML=(NAAM?`${greetWord()}, ${esc(NAAM)} · `:'')+(dt>0?`nog <strong>${dt} ${dt===1?'dag':'dagen'}</strong>`:'<strong>vandaag!</strong>');
+  $('topCount').innerHTML=(NAAM?`<i class="greet">${greetWord()}, ${esc(NAAM)} · </i>`:'')+(dt>0?`nog <strong>${dt} ${dt===1?'dag':'dagen'}</strong>`:'<strong>vandaag!</strong>');
   tabEls.forEach((e,i)=>e.classList.toggle('on',TRIPS[i]===T));tabTitles();
   document.querySelectorAll('[data-trip]').forEach(b=>b.setAttribute('aria-pressed',TRIPS[+b.dataset.trip]===T));
   const s=w.summit,v=w.village;
@@ -383,7 +383,12 @@ function fit(){VW=innerWidth;VH=innerHeight;
   if(MOB)camera.setViewOffset(VW,VH,0,VH*.12,VW,VH);else camera.clearViewOffset();camera.updateProjectionMatrix()}
 // top bar: never wrap; when it doesn't fit, drop the least important bits one by one (tb1…tb5, see style.css)
 const topbar=document.querySelector('.topbar'),TB=5;let tbQueued=false;
-function fitTopbar(){tbQueued=false;for(let i=1;i<=TB;i++)topbar.classList.remove('tb'+i);if(MOB)return;
+function fitTopbar(){tbQueued=false;for(let i=1;i<=TB;i++)topbar.classList.remove('tb'+i);
+  // phone: brand and clock share the first row; drop the greeting, then the weather, until the brand fits next to the clock
+  if(MOB){const brand=topbar.querySelector('.brand'),clock=topbar.querySelector('.clock');brand.classList.remove('bf1','bf2');
+    // measure the brand at its natural width (.measure), not shrunk with an ellipsis
+    const over=()=>{brand.classList.add('measure');const w=brand.offsetWidth;brand.classList.remove('measure');return w>topbar.clientWidth-clock.offsetWidth-16};
+    for(let i=1;i<=2&&over();i++)brand.classList.add('bf'+i);return}
   const over=()=>{const kids=[...topbar.children].flatMap(e=>getComputedStyle(e).display==='contents'?[...e.children]:[e]).filter(e=>!e.hidden&&e.offsetWidth);
     return kids.reduce((w,e)=>w+e.offsetWidth,0)+(kids.length-1)*16>topbar.clientWidth};
   for(let i=1;i<=TB&&over();i++)topbar.classList.add('tb'+i)}

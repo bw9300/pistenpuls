@@ -28,6 +28,7 @@ body{background:var(--night);color:var(--snow);font-family:var(--body);overflow:
 .brand b{font-family:var(--display);font-weight:800;font-size:34px;letter-spacing:.08em}
 .brand span{font-size:22px;color:var(--muted);margin-left:14px}
 .brand span strong{color:var(--lantaarn)}
+.brand .greet{font-style:normal}
 .brand em{font-style:normal;font-size:22px;color:var(--snow);margin-left:14px;padding-left:16px;border-left:1px solid var(--line);white-space:nowrap}
 .tabs{display:flex;gap:8px;padding:6px;border-radius:999px}
 /* top bar never wraps; fitTopbar() in app.ts adds tb1…tb5 when it doesn't fit, least important first */
@@ -268,6 +269,10 @@ body.wizard .toasts,body.wizard .chat{display:none}
 /* phone: brand and clock on the first row (clock always top right), who's watching and the trip tabs below */
 .mob .topright{display:contents}
 .mob .brand{order:1;min-width:0}
+/* phone: fitTopbar() drops the greeting (bf1), then the weather (bf2), when the brand doesn't fit next to the clock */
+.mob .brand.bf1 .greet,.mob .brand.bf2 #wxNow{display:none}
+.mob .brand span,.mob .brand em{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mob .brand.measure{flex:none;min-width:max-content}
 .mob .clock{order:2;margin-left:auto}
 .mob .who{order:3}
 .mob .tabs{order:4;flex:0 1 auto;min-width:0;margin-left:auto;padding:4px;gap:2px}
